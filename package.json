@@ -1,0 +1,15 @@
+{
+  "name": "hub",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "hub": "./index.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
