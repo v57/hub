@@ -300,63 +300,67 @@ test("writes a macOS LaunchDaemon plist for boot autostart", async () => {
 });
 
 test("writes a Windows startup script", async () => {
-  const homeDirectory = "C:\\Users\\dimas";
+  const homeDirectory = await mkdtemp(path.join(tmpdir(), "hub-home-"));
   const messages: string[] = [];
 
-  await handleAutostartCommand({
-    currentPath: "C:\\Windows\\System32",
-    globalBinDir: "C:\\Users\\dimas\\.bun\\bin",
-    homeDirectory,
-    logger: createLogger(messages),
-    pathImpl: path.win32,
-    platform: "win32",
-  });
+  try {
+    await handleAutostartCommand({
+      currentPath: "C:\\Windows\\System32",
+      globalBinDir: "C:\\Users\\dimas\\.bun\\bin",
+      homeDirectory,
+      logger: createLogger(messages),
+      pathImpl: path.posix,
+      platform: "win32",
+    });
 
-  const scriptPath = resolveWindowsAutostartPath(homeDirectory, path.win32);
-  const script = await Bun.file(scriptPath).text();
+    const scriptPath = resolveWindowsAutostartPath(homeDirectory, path.posix);
+    const script = await Bun.file(scriptPath).text();
 
-  expect(script).toContain('set "HUB_BOOTSTRAPPED=1"');
-  expect(script).toContain('set "PATH=C:\\Users\\dimas\\.bun\\bin;%PATH%"');
-  expect(script).toContain('start "" /B hub');
-  expect(messages.at(-1)).toBe(`Hub Launcher will start on login via ${scriptPath}`);
+    expect(script).toContain('set "HUB_BOOTSTRAPPED=1"');
+    expect(script).toContain('set "PATH=C:\\Users\\dimas\\.bun\\bin;%PATH%"');
+    expect(script).toContain('start "" /B hub');
+    expect(messages.at(-1)).toBe(`Hub Launcher will start on login via ${scriptPath}`);
 
-  messages.length = 0;
-  await handleAutostartCommand({
-    homeDirectory,
-    logger: createLogger(messages),
-    mode: "status",
-    pathImpl: path.win32,
-    platform: "win32",
-  });
+    messages.length = 0;
+    await handleAutostartCommand({
+      homeDirectory,
+      logger: createLogger(messages),
+      mode: "status",
+      pathImpl: path.posix,
+      platform: "win32",
+    });
 
-  expect(messages).toContain(`Hub Launcher autostart is enabled at ${scriptPath}`);
+    expect(messages).toContain(`Hub Launcher autostart is enabled at ${scriptPath}`);
 
-  messages.length = 0;
-  await handleAutostartCommand({
-    homeDirectory,
-    logger: createLogger(messages),
-    pathImpl: path.win32,
-    platform: "win32",
-    mode: "disable",
-  });
+    messages.length = 0;
+    await handleAutostartCommand({
+      homeDirectory,
+      logger: createLogger(messages),
+      pathImpl: path.posix,
+      platform: "win32",
+      mode: "disable",
+    });
 
-  expect(await Bun.file(scriptPath).exists()).toBe(false);
-  expect(messages.at(-1)).toBe(`Hub Launcher autostart disabled at ${scriptPath}`);
+    expect(await Bun.file(scriptPath).exists()).toBe(false);
+    expect(messages.at(-1)).toBe(`Hub Launcher autostart disabled at ${scriptPath}`);
 
-  messages.length = 0;
-  await handleAutostartCommand({
-    homeDirectory,
-    logger: createLogger(messages),
-    mode: "status",
-    pathImpl: path.win32,
-    platform: "win32",
-  });
+    messages.length = 0;
+    await handleAutostartCommand({
+      homeDirectory,
+      logger: createLogger(messages),
+      mode: "status",
+      pathImpl: path.posix,
+      platform: "win32",
+    });
 
-  expect(messages).toContain(`Hub Launcher autostart is disabled at ${scriptPath}`);
+    expect(messages).toContain(`Hub Launcher autostart is disabled at ${scriptPath}`);
+  } finally {
+    await rm(homeDirectory, { recursive: true, force: true });
+  }
 });
 
 test("writes a Windows scheduled task for boot autostart", async () => {
-  const homeDirectory = "C:\\Users\\dimas";
+  const homeDirectory = await mkdtemp(path.join(tmpdir(), "hub-home-"));
   const systemRootDirectory = await mkdtemp(path.join(tmpdir(), "hub-system-"));
   const messages: string[] = [];
   const taskScheduler = createWindowsTaskScheduler();
@@ -367,7 +371,7 @@ test("writes a Windows scheduled task for boot autostart", async () => {
       globalBinDir: "C:\\Users\\dimas\\.bun\\bin",
       homeDirectory,
       logger: createLogger(messages),
-      pathImpl: path.win32,
+      pathImpl: path.posix,
       platform: "win32",
       scope: "system",
       spawn: taskScheduler.spawn,
@@ -375,10 +379,11 @@ test("writes a Windows scheduled task for boot autostart", async () => {
       userName: "dimas",
     });
 
-    const scriptPath = resolveWindowsSystemAutostartPath(systemRootDirectory, path.win32);
+    const scriptPath = resolveWindowsSystemAutostartPath(systemRootDirectory, path.posix);
     const script = await Bun.file(scriptPath).text();
 
-    expect(script).toContain('set "HOME=C:\\Users\\dimas"');
+    expect(script).toContain(`set "HOME=${homeDirectory}"`);
+    expect(script).toContain(`set "USERPROFILE=${homeDirectory}"`);
     expect(script).toContain('set "USERNAME=dimas"');
     expect(taskScheduler.taskExists).toBe(true);
     expect(taskScheduler.commands.some((command) => command[1] === "/Create")).toBe(true);
@@ -389,7 +394,7 @@ test("writes a Windows scheduled task for boot autostart", async () => {
       homeDirectory,
       logger: createLogger(messages),
       mode: "status",
-      pathImpl: path.win32,
+      pathImpl: path.posix,
       platform: "win32",
       scope: "system",
       spawn: taskScheduler.spawn,
@@ -404,7 +409,7 @@ test("writes a Windows scheduled task for boot autostart", async () => {
       homeDirectory,
       logger: createLogger(messages),
       mode: "disable",
-      pathImpl: path.win32,
+      pathImpl: path.posix,
       platform: "win32",
       scope: "system",
       spawn: taskScheduler.spawn,
@@ -417,6 +422,7 @@ test("writes a Windows scheduled task for boot autostart", async () => {
     expect(taskScheduler.commands.some((command) => command[1] === "/Delete")).toBe(true);
     expect(messages.at(-1)).toBe(`Hub Launcher boot autostart disabled at ${scriptPath}`);
   } finally {
+    await rm(homeDirectory, { recursive: true, force: true });
     await rm(systemRootDirectory, { recursive: true, force: true });
   }
 });

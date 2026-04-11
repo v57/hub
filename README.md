@@ -1,55 +1,83 @@
 # hub
 
-Run this command with `bunx v57/hub` to update the global `v57/hub` install and then hand off to `hub`.
+`hub` bootstraps, updates, and controls `hub-launcher`. Run it with `bunx v57/hub` and it will hand off to `hub` after making sure the global package is current.
 
-Any extra args after `bunx v57/hub` are forwarded to `hub`.
-
-Use `bunx v57/hub stop` to stop the running `hub-launcher` process.
-
-Use `bunx v57/hub update` to refresh `hub` and `hub-launcher`, then restart the launcher.
-
-Use `bunx v57/hub restart` to restart the launcher, or start it if it is not already running.
-
-Use `bunx v57/hub uninstall` to remove the launcher when it is not running.
-
-Use `bunx v57/hub backup` to create a backup of `~/Hub/Launcher`.
-
-Use `bunx v57/hub backup list` to list backups.
-
-Use `bunx v57/hub backup restore` or `bunx v57/hub backup restore <id>` to restore the latest or a selected backup.
-
-Use `bunx v57/hub backup remove <id>` or `bunx v57/hub backup remove all` to delete backups.
-
-Use `bunx v57/hub launcher export` to print the current `launch.json` as base64, using gzip when it is much smaller.
-
-Use `bunx v57/hub launcher import <text>` to back up the current launcher and replace `launch.json`, or pass a URL to fetch the JSON config first.
-
-Use `bunx v57/hub launcher import --preview <text>` to print the imported config with 2-space indentation without replacing anything.
-
-Use `bunx v57/hub status` to check whether the launcher is running, how it autolaunches, and whether updates are available.
-
-Use `bunx v57/hub autostart` to register hub-launcher to run on login/startup for your OS.
-
-Use `bunx v57/hub autostart system` to register hub-launcher to run on boot.
-
-Use `bunx v57/hub autostart system disable` or `bunx v57/hub autostart system status` to manage the boot-time registration.
-
-Use `bunx v57/hub autostart disable` to remove the login/startup registration.
-
-Use `bunx v57/hub autostart status` to check whether login/startup registration is enabled.
-
-If your environment requires a system-level startup location, rerun with `sudo`.
-
-To install dependencies:
+## Quick Start
 
 ```bash
 bun install
-```
-
-To run:
-
-```bash
 bunx v57/hub
 ```
 
-This project was created using `bun init` in bun v1.3.8. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+Common first commands:
+
+```bash
+bunx v57/hub status
+bunx v57/hub restart
+bunx v57/hub backup
+```
+
+To update both `hub` and `hub-launcher`:
+
+```bash
+bunx v57/hub update
+```
+
+## Command Guide
+
+### Launcher Lifecycle
+
+- `bunx v57/hub` - bootstrap `hub` and launch `hub-launcher`
+- `bunx v57/hub stop` - stop running launcher
+- `bunx v57/hub restart` - start launcher, or restart it if already running
+- `bunx v57/hub update` - refresh `hub` and `hub-launcher`, then relaunch
+- `bunx v57/hub uninstall` - remove launcher when it is not running
+
+### Backups
+
+- `bunx v57/hub backup` - create backup of `~/Hub/Launcher`
+- `bunx v57/hub backup list` - list backups
+- `bunx v57/hub backup restore` - restore latest backup
+- `bunx v57/hub backup restore <id>` - restore selected backup
+- `bunx v57/hub backup remove <id>` - remove one backup
+- `bunx v57/hub backup remove all` - remove all backups
+
+### Launcher Config
+
+- `bunx v57/hub launcher export` - print `launch.json` as base64, using gzip when smaller
+- `bunx v57/hub launcher import <text>` - import base64 config
+- `bunx v57/hub launcher import <url>` - fetch JSON config from URL and import it
+- `bunx v57/hub launcher import --preview <text or url>` - print pretty JSON without changing files
+
+### Autostart
+
+- `bunx v57/hub autostart` - enable login/startup launch on your OS
+- `bunx v57/hub autostart disable` - remove login/startup launch
+- `bunx v57/hub autostart status` - show login/startup autostart state
+- `bunx v57/hub autostart system` - enable boot-time launch
+- `bunx v57/hub autostart system disable` - remove boot-time launch
+- `bunx v57/hub autostart system status` - show boot-time autostart state
+
+Use `sudo` if your OS needs admin rights for the system-level startup location.
+
+### Status and Diagnostics
+
+- `bunx v57/hub status` - show whether launcher is running, how autolaunch is set, and whether updates are available
+
+## Command Cheatsheet
+
+| Command | What it does |
+| --- | --- |
+| `bunx v57/hub` | Bootstrap `hub` and launch `hub-launcher` |
+| `bunx v57/hub update` | Update `hub` and `hub-launcher` |
+| `bunx v57/hub restart` | Restart launcher or start it if stopped |
+| `bunx v57/hub stop` | Stop running launcher |
+| `bunx v57/hub uninstall` | Remove launcher when stopped |
+| `bunx v57/hub status` | Show running, autolaunch, and update status |
+| `bunx v57/hub backup` | Create launcher backup |
+| `bunx v57/hub backup restore [id]` | Restore latest or selected backup |
+| `bunx v57/hub launcher export` | Export `launch.json` as base64 |
+| `bunx v57/hub launcher import [text|url]` | Import launcher config |
+| `bunx v57/hub autostart` | Enable login/startup autostart |
+| `bunx v57/hub autostart system` | Enable boot autostart |
+
