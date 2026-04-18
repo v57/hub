@@ -9,6 +9,22 @@ const LAUNCHER_REPO = "https://github.com/v57/hub-launcher.git";
 const LAUNCHER_ENTRYPOINT = "index.ts";
 const LAUNCH_JSON_FILE_NAME = "launch.json";
 export const LAUNCHER_PID_FILE_NAME = ".hub-launcher.pid";
+const HELP_TEXT = [
+  "Usage: hub [command] [options]",
+  "",
+  "Commands:",
+  "  status      Show launcher status, autolaunch mode, and updates",
+  "  stop        Stop the launcher",
+  "  restart     Restart the launcher",
+  "  update      Update hub and hub-launcher, then relaunch",
+  "  uninstall   Remove the launcher when it is stopped",
+  "  backup      Manage launcher backups",
+  "  launcher    Export or import launcher configuration",
+  "  autostart   Manage login or startup launch",
+  "",
+  "Flags:",
+  "  -h, --help  Show this help message",
+].join("\n");
 
 type PathLike = Pick<typeof path, "join">;
 
@@ -16,6 +32,7 @@ type SpawnLike = {
   pid?: number;
   exited: Promise<number>;
   stdout?: ReadableStream<Uint8Array> | number | null;
+  unref?: () => void;
 };
 
 type SpawnFunction = (cmd: string[], options?: Record<string, unknown>) => SpawnLike;
@@ -46,6 +63,14 @@ function defaultIsProcessAlive(pid: number): boolean {
 
 function defaultKillProcess(pid: number): void {
   process.kill(pid);
+}
+
+function isHelpRequest(args: string[]): boolean {
+  return args[0] === "-h" || args[0] === "--help" || args[0] === "help";
+}
+
+export function printHelp(logger: Pick<Console, "log"> = console): void {
+  logger.log(HELP_TEXT);
 }
 
 export function resolveLauncherDirectory(homeDirectory = homedir(), pathImpl: PathLike = path): string {
@@ -86,8 +111,8 @@ async function ensureLauncherCloned(launcherDirectory: string, spawn: SpawnFunct
   await mkdir(path.dirname(launcherDirectory), { recursive: true });
 
   const clone = spawn(["git", "clone", LAUNCHER_REPO, launcherDirectory], {
-    stdout: "inherit",
-    stderr: "inherit",
+    stdout: "ignore",
+    stderr: "ignore",
   });
 
   const exitCode = await clone.exited;
@@ -99,8 +124,8 @@ async function ensureLauncherCloned(launcherDirectory: string, spawn: SpawnFunct
 async function installLauncherDependencies(launcherDirectory: string, spawn: SpawnFunction = defaultSpawn): Promise<void> {
   const install = spawn([process.execPath, "install"], {
     cwd: launcherDirectory,
-    stdout: "inherit",
-    stderr: "inherit",
+    stdout: "ignore",
+    stderr: "ignore",
   });
 
   const exitCode = await install.exited;
@@ -112,8 +137,8 @@ async function installLauncherDependencies(launcherDirectory: string, spawn: Spa
 async function updateLauncherRepository(launcherDirectory: string, spawn: SpawnFunction = defaultSpawn): Promise<void> {
   const update = spawn(["git", "pull"], {
     cwd: launcherDirectory,
-    stdout: "inherit",
-    stderr: "inherit",
+    stdout: "ignore",
+    stderr: "ignore",
   });
 
   const exitCode = await update.exited;
@@ -202,8 +227,8 @@ async function launcherHasUpdates(launcherDirectory: string, spawn: SpawnFunctio
 
   const fetchProcess = spawn(["git", "fetch", "--quiet"], {
     cwd: launcherDirectory,
-    stdout: "inherit",
-    stderr: "inherit",
+    stdout: "ignore",
+    stderr: "ignore",
   });
   if ((await fetchProcess.exited) !== 0) {
     return false;
@@ -212,7 +237,7 @@ async function launcherHasUpdates(launcherDirectory: string, spawn: SpawnFunctio
   const revListProcess = spawn(["git", "rev-list", "--count", "HEAD..@{u}"], {
     cwd: launcherDirectory,
     stdout: "pipe",
-    stderr: "inherit",
+    stderr: "ignore",
   });
   if ((await revListProcess.exited) !== 0) {
     return false;
@@ -322,6 +347,7 @@ async function launchLauncher(launcherDirectory: string, pidFilePath: string, sp
     stdout: "ignore",
     stderr: "ignore",
   });
+  subprocess.unref?.();
 
   if (!subprocess.pid) {
     throw new Error("Failed to launch hub-launcher in the background");
@@ -356,6 +382,11 @@ export async function main(options?: {
 
   const launcherDirectory = resolveLauncherDirectory(homeDirectory);
   const pidFilePath = resolvePidFilePath(launcherDirectory);
+
+  if (isHelpRequest(args)) {
+    printHelp(logger);
+    return;
+  }
 
   if (args[0] === "launcher") {
     if (args[1] === "export") {
@@ -479,7 +510,7 @@ export async function main(options?: {
 
   const pidText = await readPidFile(pidFilePath);
   if (isLauncherAlreadyRunning(pidText, isProcessAlive)) {
-    console.log(`Hub Launcher is already running at ${launcherDirectory}`);
+    logger.log(`Hub Launcher is already running at ${launcherDirectory}`);
     return;
   }
 

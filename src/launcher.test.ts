@@ -109,6 +109,19 @@ test("treats a live pid as running", () => {
   expect(isLauncherAlreadyRunning("42", () => false)).toBe(false);
 });
 
+test("prints help for launcher entrypoints", async () => {
+  const messages: string[] = [];
+
+  await main({
+    args: ["--help"],
+    logger: createLogger(messages),
+  });
+
+  expect(messages).toHaveLength(1);
+  expect(messages[0]).toContain("Usage: hub [command] [options]");
+  expect(messages[0]).toContain("  restart     Restart the launcher");
+});
+
 test("reports running, login autolaunch, and available updates", async () => {
   const homeDirectory = await mkdtemp(path.join(tmpdir(), "hub-home-"));
   const launcherDirectory = resolveLauncherDirectory(homeDirectory);
@@ -411,16 +424,22 @@ test("installs and launches when the launcher is not running", async () => {
     await Bun.write(path.join(launcherDirectory, "package.json"), "{}");
 
     const commands: string[][] = [];
+    const spawnOptions: Array<Record<string, unknown> | undefined> = [];
+    const unrefCalls: string[] = [];
 
     await main({
       homeDirectory,
       isProcessAlive: () => false,
       spawn: (cmd, options) => {
         commands.push(cmd);
+        spawnOptions.push(options as Record<string, unknown> | undefined);
 
         return {
           pid: cmd[1] === "index.ts" ? 321 : undefined,
           exited: Promise.resolve(0),
+          unref: () => {
+            unrefCalls.push(cmd.join(" "));
+          },
         };
       },
     });
@@ -429,6 +448,18 @@ test("installs and launches when the launcher is not running", async () => {
       [process.execPath, "install"],
       [process.execPath, "index.ts"],
     ]);
+    expect(spawnOptions[0]).toMatchObject({
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+    expect(spawnOptions[1]).toMatchObject({
+      stdout: "ignore",
+      stderr: "ignore",
+      stdin: "ignore",
+      detached: true,
+      windowsHide: true,
+    });
+    expect(unrefCalls).toEqual([`${process.execPath} index.ts`]);
     expect(await Bun.file(resolvePidFilePath(launcherDirectory)).text()).toBe("321\n");
   } finally {
     await rm(homeDirectory, { recursive: true, force: true });
@@ -572,6 +603,8 @@ test("updates and relaunches a running launcher", async () => {
     await Bun.write(path.join(launcherDirectory, "package.json"), "{}");
 
     const commands: string[][] = [];
+    const spawnOptions: Array<Record<string, unknown> | undefined> = [];
+    const unrefCalls: string[] = [];
     const killedPids: number[] = [];
 
     await main({
@@ -583,10 +616,14 @@ test("updates and relaunches a running launcher", async () => {
       },
       spawn: (cmd, options) => {
         commands.push(cmd);
+        spawnOptions.push(options as Record<string, unknown> | undefined);
 
         return {
           pid: cmd[1] === "index.ts" ? 321 : undefined,
           exited: Promise.resolve(0),
+          unref: () => {
+            unrefCalls.push(cmd.join(" "));
+          },
         };
       },
     });
@@ -597,6 +634,22 @@ test("updates and relaunches a running launcher", async () => {
       [process.execPath, "install"],
       [process.execPath, "index.ts"],
     ]);
+    expect(spawnOptions[0]).toMatchObject({
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+    expect(spawnOptions[1]).toMatchObject({
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+    expect(spawnOptions[2]).toMatchObject({
+      stdout: "ignore",
+      stderr: "ignore",
+      stdin: "ignore",
+      detached: true,
+      windowsHide: true,
+    });
+    expect(unrefCalls).toEqual([`${process.execPath} index.ts`]);
     expect(await Bun.file(resolvePidFilePath(launcherDirectory)).text()).toBe("321\n");
   } finally {
     await rm(homeDirectory, { recursive: true, force: true });

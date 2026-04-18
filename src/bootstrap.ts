@@ -14,8 +14,8 @@ type WhichFunction = (bin: string, options?: { PATH?: string }) => string | null
 
 async function runCommand(cmd: string[], spawn: SpawnFunction): Promise<void> {
   const process = spawn(cmd, {
-    stdout: "inherit",
-    stderr: "inherit",
+    stdout: "ignore",
+    stderr: "ignore",
   });
 
   const exitCode = await process.exited;
@@ -27,7 +27,7 @@ async function runCommand(cmd: string[], spawn: SpawnFunction): Promise<void> {
 export async function resolveGlobalBinDir(spawn: SpawnFunction): Promise<string> {
   const process = spawn(["bun", "pm", "bin", "-g"], {
     stdout: "pipe",
-    stderr: "inherit",
+    stderr: "ignore",
   });
 
   const exitCode = await process.exited;
