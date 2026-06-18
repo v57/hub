@@ -1,5 +1,7 @@
-# hub
-
+<h1>
+  <img alt="Containerization logo" src="./icon.png" width="70" valign="middle">
+  &nbsp;hub
+</h1>
 `hub` controls `hub-launcher`. Run it with `hub` to use the already installed copy, or `hub` to bootstrap and update the global package before handing off to `hub`.
 
 ## Quick Start
