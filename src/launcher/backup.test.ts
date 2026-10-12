@@ -122,7 +122,7 @@ test('refuses to restore while the launcher is running', async () => {
 
     expect(errors.some(line => line.includes('Stop it first before restoring'))).toBe(true)
     expect(process.exitCode).toBe(1)
-    process.exitCode = undefined
+    process.exitCode = 0
   } finally {
     await rm(homeDirectory, { recursive: true, force: true })
   }

@@ -414,7 +414,7 @@ test('refuses to import a launch configuration while the launcher is running', a
     expect(messages).toContain(`Hub Launcher is running at ${launcherDirectory}. Stop it first before importing.`)
     expect(await Bun.file(resolveLaunchJsonPath(launcherDirectory)).text()).toBe(`{"source":"old"}\n`)
   } finally {
-    process.exitCode = previousExitCode
+    process.exitCode = previousExitCode ?? 0
     await rm(homeDirectory, { recursive: true, force: true })
   }
 })
@@ -569,6 +569,7 @@ test('uninstalls the launcher when it is not running', async () => {
 test('refuses to uninstall a running launcher', async () => {
   const homeDirectory = await mkdtemp(path.join(tmpdir(), 'hub-home-'))
   const launcherDirectory = resolveLauncherDirectory(homeDirectory)
+  const previousExitCode = process.exitCode
 
   try {
     await mkdir(launcherDirectory, { recursive: true })
@@ -594,6 +595,7 @@ test('refuses to uninstall a running launcher', async () => {
     expect(await Bun.file(resolvePidFilePath(launcherDirectory)).exists()).toBe(true)
     expect(await Bun.file(path.join(launcherDirectory, 'package.json')).exists()).toBe(true)
   } finally {
+    process.exitCode = previousExitCode ?? 0
     await rm(homeDirectory, { recursive: true, force: true })
   }
 })

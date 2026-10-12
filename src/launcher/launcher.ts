@@ -19,6 +19,7 @@ const HELP_TEXT = [
   "  update      Update hub and hub-launcher, then relaunch",
   "  uninstall   Remove the launcher when it is stopped",
   "  backup      Manage launcher backups",
+  "  client      Start the terminal client",
   "  launcher    Export or import launcher configuration",
   "  autostart   Manage login or startup launch",
   "",

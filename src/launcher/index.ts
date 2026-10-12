@@ -1,10 +1,13 @@
 import { bootstrapEnvironmentVariable, bootstrapHub } from './bootstrap'
 import { main, printHelp } from './launcher'
+import { runHubClientCommand } from '../client'
+import { BunFileConnectionStore } from '../hub'
 
 type RunOptions = {
   args?: string[]
   env?: Record<string, string | undefined>
   bootstrap?: typeof bootstrapHub
+  client?: typeof runHubClientCommand
   launch?: typeof main
   logger?: Pick<Console, 'log'>
 }
@@ -17,11 +20,17 @@ export async function run(options?: RunOptions): Promise<void> {
   const args = options?.args ?? process.argv.slice(2)
   const env = options?.env ?? process.env
   const bootstrap = options?.bootstrap ?? bootstrapHub
+  const client = options?.client ?? runHubClientCommand
   const launch = options?.launch ?? main
   const logger = options?.logger ?? console
 
   if (args[0] === '-h' || args[0] === '--help' || args[0] === 'help') {
     printHelp(logger)
+    return
+  }
+
+  if (args[0] === 'client') {
+    await client({ args: args.slice(1), connectionStore: new BunFileConnectionStore() })
     return
   }
 
