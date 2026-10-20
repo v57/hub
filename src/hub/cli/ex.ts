@@ -2,6 +2,8 @@ import { basename } from 'node:path'
 import {
   AppControl,
   BunFileConnectionStore,
+  BunFileHubKeyStore,
+  DeviceIdentity,
   HubClient,
   HubControl,
   LauncherControl,
@@ -10,6 +12,7 @@ import {
   createDefaultKeyStore,
   type ConnectionStore,
   type HubContext,
+  type HubKeyStore,
   type HubRuntimeClient,
   type KeyStore,
   type LauncherCreate,
@@ -36,7 +39,9 @@ export interface ParsedExCommand {
 export interface ExEnvironment {
   connections?: ConnectionStore
   keyStore?: KeyStore
-  createClient?: (options: { address?: string; keyStore: KeyStore }) => HubRuntimeClient
+  hubKeys?: HubKeyStore
+  device?: DeviceIdentity
+  createClient?: (options: { address?: string; keyStore: KeyStore; hubKeys: HubKeyStore; device?: DeviceIdentity }) => HubRuntimeClient
   log?: (line: string) => void
   fetch?: StorageFetch
 }
@@ -54,7 +59,9 @@ interface ExContext {
   readonly env: ExEnvironment
   readonly connections: ConnectionStore
   readonly keyStore: KeyStore
+  readonly hubKeys: HubKeyStore
   log(value: unknown): void
+  selectedAddress(): Promise<string>
   client(): Promise<HubRuntimeClient>
   hub(): Promise<HubControl>
   launcher(): Promise<LauncherControl>
@@ -74,6 +81,9 @@ const helpEntries: HelpEntry[] = [
   { id: 'selected', group: 'connection', usage: 'selected', endpoint: 'connection-store selected', description: 'Print selected Hub connection.' },
   { id: 'key', group: 'connection', usage: 'key', endpoint: 'key-store publicKey', description: 'Print local public key.' },
   { id: 'key:reset', group: 'connection', usage: 'key reset --yes', endpoint: 'key-store reset', description: 'Reset local key material.' },
+  { id: 'info', group: 'connection', usage: 'info', endpoint: 'hub/info', description: 'Print the hub key, protocol and security mode.' },
+  { id: 'hubkey', group: 'connection', usage: 'hubkey', endpoint: 'hubs.json', description: 'Print the pinned key of the selected hub.' },
+  { id: 'hubkey:forget', group: 'connection', usage: 'hubkey forget', endpoint: 'hubs.json', description: 'Forget the pinned hub key; the next connect learns it again.' },
   { id: 'api', group: 'raw api', usage: 'api', endpoint: 'hub/api', description: 'Stream API endpoint list.' },
   { id: 'call', group: 'raw api', usage: 'call <path> [json-body]', endpoint: '<path>', description: 'Send raw request.' },
   { id: 'stream', group: 'raw api', usage: 'stream <path> [json-body]', endpoint: '<path>', description: 'Stream raw values.' },
@@ -158,6 +168,9 @@ const commandRunners: Record<string, CommandRunner> = {
     await context.keyStore.reset()
     context.log('ok')
   },
+  info: async context => context.log(await (await context.client()).send('hub/info')),
+  hubkey: async context => context.log((await context.hubKeys.get(await context.selectedAddress())) ?? 'not pinned'),
+  'hubkey:forget': async context => context.log({ forgotten: await context.hubKeys.forget(await context.selectedAddress()) }),
   api: async context => printStream(context, (await context.hub()).watchApi()),
   call: async (context, args) => context.log(await (await context.client()).send(expectArg(args, 0, 'path'), parseJsonArg(args[1]), context.options.context)),
   stream: async (context, args) => printStream(context, (await context.client()).values(expectArg(args, 0, 'path'), parseJsonArg(args[1]), context.options.context)),
@@ -287,6 +300,8 @@ export function formatHelp(topics: string[] = []): string {
 function createContext(options: ExCommandOptions, env: ExEnvironment): ExContext {
   const connections = env.connections ?? new BunFileConnectionStore()
   const keyStore = env.keyStore ?? defaultCliKeyStore()
+  const hubKeys = env.hubKeys ?? new BunFileHubKeyStore()
+  const device = env.device
   const log = env.log ?? console.log
   let client: HubRuntimeClient | undefined
   let hub: HubControl | undefined
@@ -300,13 +315,17 @@ function createContext(options: ExCommandOptions, env: ExEnvironment): ExContext
     env,
     connections,
     keyStore,
+    hubKeys,
     log(value: unknown) {
       log(formatValue(value, options.json))
     },
+    async selectedAddress() {
+      return new HubClient({ address: (await connections.selected())?.address }).address
+    },
     async client() {
       if (!client) {
-        const selected = await connections.selected()
-        client = env.createClient?.({ address: selected?.address, keyStore }) ?? new HubClient({ address: selected?.address, keyStore })
+        const address = (await connections.selected())?.address
+        client = env.createClient?.({ address, keyStore, hubKeys, device }) ?? new HubClient({ address, keyStore, hubKeys, device })
       }
       return client
     },
@@ -388,6 +407,10 @@ function route(words: string[]): { id: string; args: string[] } {
     case 'groups':
       if (first === 'connections' && second === 'users') return { id: 'connections:users', args: words.slice(2) }
       return { id: first, args: words.slice(1) }
+    case 'info':
+      return { id: 'info', args: words.slice(1) }
+    case 'hubkey':
+      return second === 'forget' ? { id: 'hubkey:forget', args: words.slice(2) } : { id: 'hubkey', args: words.slice(1) }
     case 'key':
       return second === 'reset' ? { id: 'key:reset', args: words.slice(2) } : { id: 'key', args: words.slice(1) }
     case 'call':

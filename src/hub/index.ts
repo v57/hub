@@ -1,4 +1,13 @@
-export { HubClient, type HubClientOptions, type HubServiceFactory, type HubServiceLike } from './client'
+export {
+  HubClient,
+  normalizeHubInfo,
+  type HubClientOptions,
+  type HubConnectionHeaders,
+  type HubInfo,
+  type HubServiceFactory,
+  type HubServiceLike,
+  type HubServiceOptions,
+} from './client'
 export {
   HubControl,
   type HubBalancerType,
@@ -77,8 +86,33 @@ export {
   generateHubKeyMaterial,
   getHubPublicKey,
   hubAuthHeaders,
+  hubAuthSignedData,
+  hubDeviceId,
+  hubSafetyCode,
   signHubAuth,
+  signHubAuthAt,
+  signHubData,
 } from './auth/key-material'
+export {
+  BaseHubKeyStore,
+  BunFileHubKeyStore,
+  MemoryHubKeyStore,
+  defaultHubKeyStoreFileName,
+  type BunFileHubKeyStoreOptions,
+  type HubKeyStore,
+} from './auth/hub-key-store'
+export {
+  DeviceIdentity,
+  createServiceCertificate,
+  decodeServiceCertificate,
+  defaultCertificateLifetime,
+  devicePlatform,
+  resolveDeviceKeyPath,
+  suggestedDeviceName,
+  type DeviceIdentityOptions,
+  type ServiceCertificate,
+  type ServiceCertificateOptions,
+} from './auth/device-key'
 
 export {
   BaseConnectionStore,

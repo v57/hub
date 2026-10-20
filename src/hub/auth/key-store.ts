@@ -3,8 +3,9 @@ import { generateHubKeyMaterial, getHubPublicKey, hubAuthHeaders, signHubAuth } 
 export interface KeyStore {
   getOrCreatePrivateKey(): Promise<string>
   publicKey(): Promise<string>
-  sign(expiresSeconds?: number): Promise<string>
-  authHeaders(expiresSeconds?: number): Promise<Record<'auth' | 'v', string>>
+  /** `hubKey` binds the token to one hub (`v: 1`); without it the token is `v: 0`. */
+  sign(expiresSeconds?: number, hubKey?: string): Promise<string>
+  authHeaders(expiresSeconds?: number, hubKey?: string): Promise<Record<'auth' | 'v', string>>
   reset?(): Promise<void>
 }
 
@@ -28,12 +29,12 @@ export abstract class StoredKeyStore implements KeyStore {
     return getHubPublicKey(await this.getOrCreatePrivateKey())
   }
 
-  async sign(expiresSeconds = 10): Promise<string> {
-    return signHubAuth(await this.getOrCreatePrivateKey(), expiresSeconds)
+  async sign(expiresSeconds = 10, hubKey?: string): Promise<string> {
+    return signHubAuth(await this.getOrCreatePrivateKey(), expiresSeconds, hubKey)
   }
 
-  async authHeaders(expiresSeconds = 10): Promise<Record<'auth' | 'v', string>> {
-    return hubAuthHeaders(await this.getOrCreatePrivateKey(), expiresSeconds)
+  async authHeaders(expiresSeconds = 10, hubKey?: string): Promise<Record<'auth' | 'v', string>> {
+    return hubAuthHeaders(await this.getOrCreatePrivateKey(), expiresSeconds, hubKey)
   }
 
   async reset(): Promise<void> {

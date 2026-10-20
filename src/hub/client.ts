@@ -1,4 +1,6 @@
 import { MultiplatformService, type ServiceOptions } from 'hub-service/service'
+import type { DeviceIdentity } from './auth/device-key'
+import { MemoryHubKeyStore, type HubKeyStore } from './auth/hub-key-store'
 import { MemoryKeyStore } from './auth/memory-key-store'
 import type { KeyStore } from './auth/key-store'
 import { normalizeHubAddress } from './connections/connection-store'
@@ -11,9 +13,31 @@ export interface HubClientOptions {
   profile?: HubProfile
   serviceFactory?: HubServiceFactory
   autoStart?: boolean
+  /** Pinned hub keys; the client learns and pins the key from `hub/info` on its first connection. */
+  hubKeys?: HubKeyStore
+  /** A hub key known up front (from an invitation or config); pinned on first use. */
+  hubKey?: string
+  /** Sends a certificate from this device key; without it the client is a key-only client without a device. */
+  device?: DeviceIdentity
 }
 
-export type HubServiceFactory = (sign: () => Promise<string>, options: ServiceOptions) => HubServiceLike
+export interface HubServiceOptions extends ServiceOptions {
+  onConnect?(sender: HubSenderLike): Promise<void>
+}
+
+export type HubConnectionHeaders = Record<string, string>
+export type HubServiceFactory = (headers: () => Promise<HubConnectionHeaders>, options: HubServiceOptions) => HubServiceLike
+
+/** `hub/info`, answered by hubs that speak protocol 1. */
+export interface HubInfo {
+  key: string
+  protocol: number
+  pro?: boolean
+  mode?: 'default-allow' | 'default-deny'
+}
+
+/** Token lifetime for connect headers (the hub accepts up to 300 s). */
+const authExpiresSeconds = 60
 
 export interface HubServiceLike {
   address?: HubAddress
@@ -37,8 +61,13 @@ export interface HubSenderLike {
 export class HubClient {
   readonly address: string
   readonly keyStore: KeyStore
+  readonly hubKeys: HubKeyStore
+  readonly device?: DeviceIdentity
   readonly profile?: HubProfile
+  /** The latest `hub/info` answer, if the hub sent one. */
+  info?: HubInfo
   private readonly serviceFactory: HubServiceFactory
+  private readonly suppliedHubKey?: string
   private service?: HubServiceLike
   private hasStarted = false
   private hasStopped = false
@@ -46,6 +75,9 @@ export class HubClient {
   constructor(options: HubClientOptions = {}) {
     this.address = normalizeHubAddress(options.address ?? defaultHubAddress())
     this.keyStore = options.keyStore ?? new MemoryKeyStore()
+    this.hubKeys = options.hubKeys ?? new MemoryHubKeyStore()
+    this.suppliedHubKey = options.hubKey
+    this.device = options.device
     this.profile = options.profile
     this.serviceFactory = options.serviceFactory ?? defaultServiceFactory
     if (options.autoStart) this.start()
@@ -54,15 +86,51 @@ export class HubClient {
   start(): this {
     if (this.hasStarted) return this
     this.hasStopped = false
-    this.service = this.serviceFactory(() => this.keyStore.sign(), {
+    this.service = this.serviceFactory(() => this.connectHeaders(), {
       address: this.address,
       name: this.profile?.name,
       icon: typeof this.profile?.icon === 'string' ? undefined : this.profile?.icon,
+      onConnect: sender => this.learnHubKey(sender),
     })
     if (this.profile && this.service) this.service.profile = this.profile
     this.service.start()
     this.hasStarted = true
     return this
+  }
+
+  /** The pinned key of this hub; set once the client signs `v: 1` tokens for it. */
+  async hubKey(): Promise<string | undefined> {
+    const pinned = await this.hubKeys.get(this.address)
+    if (pinned) return pinned
+    if (!this.suppliedHubKey) return undefined
+    await this.hubKeys.pin(this.address, this.suppliedHubKey)
+    return this.suppliedHubKey
+  }
+
+  /** Clears the pin; the next connect uses `v: 0` and learns the key again. */
+  forgetHubKey(): Promise<boolean> {
+    return this.hubKeys.forget(this.address)
+  }
+
+  /**
+   * Headers for each connect: a `v: 1` token bound to the pinned hub key, or `v: 0` until one is known, plus the
+   * `device` certificate in device mode. A refused `v: 1` token is not retried as `v: 0`.
+   */
+  async connectHeaders(): Promise<HubConnectionHeaders> {
+    const headers: HubConnectionHeaders = await this.keyStore.authHeaders(authExpiresSeconds, await this.hubKey())
+    if (this.device) headers.device = await this.device.certificate(await this.keyStore.publicKey())
+    return headers
+  }
+
+  private async learnHubKey(sender: HubSenderLike): Promise<void> {
+    try {
+      const info = normalizeHubInfo(await sender.send('hub/info'))
+      if (!info) return
+      this.info = info
+      if (!(await this.hubKeys.get(this.address))) await this.hubKeys.pin(this.address, info.key)
+    } catch {
+      // Hubs without `hub/info` (hub-lite, older hub-pro) keep v0.
+    }
   }
 
   get connected(): boolean {
@@ -134,4 +202,43 @@ function defaultHubAddress(): HubAddress {
   return runtime.Bun?.env?.HUB ?? 1997
 }
 
-const defaultServiceFactory: HubServiceFactory = (sign, options) => new MultiplatformService(sign, options)
+export function normalizeHubInfo(value: unknown): HubInfo | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const info = value as Record<string, unknown>
+  if (typeof info.key !== 'string' || !info.key) return undefined
+  return {
+    key: info.key,
+    protocol: typeof info.protocol === 'number' ? info.protocol : 1,
+    pro: typeof info.pro === 'boolean' ? info.pro : undefined,
+    mode: info.mode === 'default-deny' || info.mode === 'default-allow' ? info.mode : undefined,
+  }
+}
+
+/** A key-only client connection: `MultiplatformService` with our own headers (it hard-codes `v: 0`). */
+class HubClientService extends MultiplatformService {
+  constructor(
+    private readonly headers: () => Promise<HubConnectionHeaders>,
+    private readonly options: HubServiceOptions,
+  ) {
+    super(async () => '', options)
+  }
+
+  override start(): this {
+    const getProfile = () => this.profile
+    const onConnect = this.options.onConnect
+    this.sender = this.channel.connect(this.address, {
+      headers: this.headers,
+      async onConnect(sender) {
+        try {
+          const profile = getProfile()
+          if (profile) await sender.send('hub/profile/update', profile)
+        } catch {}
+        await sender.send('hub/service/update', { services: [], apps: [] })
+        await onConnect?.(sender)
+      },
+    })
+    return this
+  }
+}
+
+const defaultServiceFactory: HubServiceFactory = (headers, options) => new HubClientService(headers, options)

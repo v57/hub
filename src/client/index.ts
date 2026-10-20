@@ -1,13 +1,26 @@
 import { MemoryTerminalDevice, NavigationStack, State, Terminal, type TerminalDevice, type ViewNode } from './terminal'
 import { clientPages, renderClientRoute } from './pages/registry'
 import { clientRouteIds, createClientPageState, type ClientPageState, type ClientRouteId } from './pages/types'
-import { HubClient, HubControl, createDefaultKeyStore, type ConnectionStore, type KeyStore } from '../hub'
+import {
+  DeviceIdentity,
+  HubClient,
+  HubControl,
+  MemoryHubKeyStore,
+  createDefaultKeyStore,
+  type ConnectionStore,
+  type HubKeyStore,
+  type KeyStore,
+} from '../hub'
 
 export interface RunHubClientCommandOptions {
   args?: string[]
   state?: Partial<ClientPageState>
   connectionStore?: ConnectionStore
   keyStore?: KeyStore
+  /** Pinned hub keys; defaults to memory (the `hub client` command passes `~/.hub-lib/hubs.json`). */
+  hubKeys?: HubKeyStore
+  /** Used with `--device`; defaults to the device key at `HUB_DEVICE_KEY` or `~/.hub/device.key`. */
+  deviceIdentity?: DeviceIdentity
   connectionProbe?: ConnectionProbe
   device?: TerminalDevice
   stdout?: OutputWriter
@@ -20,11 +33,18 @@ export interface OutputWriter {
 interface ClientCommand {
   route: ClientRouteId
   smoke: boolean
+  device: boolean
+}
+
+export interface ConnectionAuth {
+  hubKeys: HubKeyStore
+  device?: DeviceIdentity
 }
 
 export type ConnectionProbe = (
   connection: ClientPageState['connections'][number],
   keyStore: KeyStore,
+  auth: ConnectionAuth,
 ) => Promise<Partial<ClientPageState['connections'][number]>>
 
 export interface RenderHubClientFrameOptions {
@@ -78,9 +98,13 @@ export async function runHubClientCommand(options: RunHubClientCommandOptions = 
     return
   }
 
+  const auth: ConnectionAuth = {
+    hubKeys: options.hubKeys ?? new MemoryHubKeyStore(),
+    device: command.device ? (options.deviceIdentity ?? new DeviceIdentity()) : undefined,
+  }
   const terminal = new Terminal(options.device).controls(true)
   const initialPath = command.route === 'home' ? [] : [command.route]
-  terminal.display(createHubClientView(await resolveStartupState(options), initialPath))
+  terminal.display(createHubClientView(await resolveStartupState(options, auth), initialPath))
 }
 
 export function clientHelpText(): string {
@@ -107,10 +131,12 @@ function isClientHelpRequest(args: string[]): boolean {
 
 function parseClientCommand(args: string[]): ClientCommand {
   const smoke = args.includes('--smoke')
+  const device = false
   const routeArgs = args.filter(arg => arg !== '--smoke')
   return {
     route: resolveClientRoute(routeArgs),
     smoke,
+    device,
   }
 }
 
@@ -133,7 +159,7 @@ function isClientRouteId(route: string): route is ClientRouteId {
   return routeIdSet.has(route)
 }
 
-async function resolveStartupState(options: RunHubClientCommandOptions): Promise<ClientPageState> {
+async function resolveStartupState(options: RunHubClientCommandOptions, auth: ConnectionAuth): Promise<ClientPageState> {
   const state = createClientPageState(options.state)
   const keyStore = options.keyStore ?? createDefaultKeyStore()
   if (!state.publicKey) {
@@ -157,7 +183,7 @@ async function resolveStartupState(options: RunHubClientCommandOptions): Promise
         const index = summaries.findIndex(connection => connection.id === selectedId)
         if (index >= 0) {
           const probe = options.connectionProbe ?? defaultConnectionProbe
-          const refreshed = await probe(summaries[index]!, keyStore)
+          const refreshed = await probe(summaries[index]!, keyStore, auth)
           summaries[index] = { ...summaries[index]!, ...refreshed }
         }
       }
@@ -173,8 +199,9 @@ async function resolveStartupState(options: RunHubClientCommandOptions): Promise
 async function defaultConnectionProbe(
   connection: ClientPageState['connections'][number],
   keyStore: KeyStore,
+  auth: ConnectionAuth,
 ): Promise<Partial<ClientPageState['connections'][number]>> {
-  const client = new HubClient({ address: connection.address, keyStore })
+  const client = new HubClient({ address: connection.address, keyStore, hubKeys: auth.hubKeys, device: auth.device })
   try {
     const status = await new HubControl(client).status()
     return {

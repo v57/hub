@@ -22,12 +22,12 @@ class FallbackKeyStore implements KeyStore {
     return this.use(keyStore => keyStore.publicKey())
   }
 
-  sign(expiresSeconds?: number): Promise<string> {
-    return this.use(keyStore => keyStore.sign(expiresSeconds))
+  sign(expiresSeconds?: number, hubKey?: string): Promise<string> {
+    return this.use(keyStore => keyStore.sign(expiresSeconds, hubKey))
   }
 
-  authHeaders(expiresSeconds?: number): Promise<Record<'auth' | 'v', string>> {
-    return this.use(keyStore => keyStore.authHeaders(expiresSeconds))
+  authHeaders(expiresSeconds?: number, hubKey?: string): Promise<Record<'auth' | 'v', string>> {
+    return this.use(keyStore => keyStore.authHeaders(expiresSeconds, hubKey))
   }
 
   async reset(): Promise<void> {

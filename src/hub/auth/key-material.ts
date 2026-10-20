@@ -33,17 +33,53 @@ export function getHubPublicKey(key: string): string {
   return encodeBase64(keyBuffer.subarray(keyBuffer.length - publicDerLength))
 }
 
-export async function signHubAuth(key: string, expiresSeconds = 10): Promise<string> {
-  const expiry = `${Math.round(Date.now() / 1000) + expiresSeconds}`
-  const signature = hasNodeCrypto() ? await signNode(key, expiry) : await signWeb(key, expiry)
+/** Signs `auth` for one hub (`v: 1`) when `hubKey` is given, otherwise the hub-agnostic `v: 0` token. */
+export async function signHubAuth(key: string, expiresSeconds = 10, hubKey?: string): Promise<string> {
+  return signHubAuthAt(key, Math.round(Date.now() / 1000) + expiresSeconds, hubKey)
+}
+
+export async function signHubAuthAt(key: string, expiry: number, hubKey?: string): Promise<string> {
+  const signature = await signHubData(key, hubAuthSignedData(expiry, hubKey))
   return `key.${getHubPublicKey(key)}.${signature}.${expiry}`
 }
 
-export async function hubAuthHeaders(key: string, expiresSeconds = 10): Promise<Record<'auth' | 'v', string>> {
+export function hubAuthSignedData(expiry: number, hubKey?: string): string {
+  return hubKey ? `hub1:${hubKey}:${expiry}` : `${expiry}`
+}
+
+export async function hubAuthHeaders(key: string, expiresSeconds = 10, hubKey?: string): Promise<Record<'auth' | 'v', string>> {
   return {
-    auth: await signHubAuth(key, expiresSeconds),
-    v: '0',
+    auth: await signHubAuth(key, expiresSeconds, hubKey),
+    v: hubKey ? '1' : '0',
   }
+}
+
+/** Ed25519 signature of `data` with the key material, base64. */
+export async function signHubData(key: string, data: string): Promise<string> {
+  return hasNodeCrypto() ? signNode(key, data) : signWeb(key, data)
+}
+
+/** Device id: the first 16 bytes of SHA-256 over the device's SPKI DER, hex. */
+export async function hubDeviceId(publicKey: string): Promise<string> {
+  const hash = await sha256(decodeBase64(publicKey))
+  return Array.from(hash.subarray(0, 16), byte => byte.toString(16).padStart(2, '0')).join('')
+}
+
+/** Safety code shown on both sides of a device approval: the same hash's first 4 bytes mod 10^6, as `ddd ddd`. */
+export async function hubSafetyCode(publicKey: string): Promise<string> {
+  const hash = await sha256(decodeBase64(publicKey))
+  const value = (((hash[0]! << 24) >>> 0) + (hash[1]! << 16) + (hash[2]! << 8) + hash[3]!) % 1_000_000
+  const digits = `${value}`.padStart(6, '0')
+  return `${digits.slice(0, 3)} ${digits.slice(3)}`
+}
+
+async function sha256(data: Uint8Array): Promise<Uint8Array> {
+  if (hasNodeCrypto()) {
+    const { createHash } = await import('crypto')
+    return new Uint8Array(createHash('sha256').update(data).digest())
+  }
+  const subtle = getSubtleCrypto() as unknown as { digest(algorithm: string, data: Uint8Array): Promise<ArrayBuffer> }
+  return new Uint8Array(await subtle.digest('SHA-256', data))
 }
 
 async function generateNodeKeyMaterial(): Promise<string> {
