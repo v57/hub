@@ -28,9 +28,6 @@ export {
   flattenLauncherProcesses,
   normalizeLauncherInfo,
   normalizeLauncherStatus,
-  terminalInput,
-  terminalRequest,
-  terminalResize,
 } from './api/launcher-control'
 export {
   DeviceControl,
@@ -190,9 +187,6 @@ export type {
   LauncherSetup,
   LauncherShellSetup,
   LauncherStatus,
-  LauncherTerminalInput,
-  LauncherTerminalRequest,
-  LauncherTerminalResize,
   LauncherTerminalSettings,
 } from './types/launcher'
 export type {

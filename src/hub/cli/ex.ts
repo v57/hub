@@ -26,7 +26,6 @@ import {
 export interface ExCommandOptions {
   json: boolean
   yes: boolean
-  end: boolean
   help: boolean
   /** Connect as this device (send a certificate from the device key); off by default. */
   device: boolean
@@ -35,7 +34,6 @@ export interface ExCommandOptions {
   /** `group create --person`. */
   person: boolean
   context?: HubContext
-  pid?: number
 }
 
 export interface ParsedExCommand {
@@ -115,9 +113,6 @@ const helpEntries: HelpEntry[] = [
   { id: 'launcher:app:settings', group: 'launcher', usage: 'launcher app settings <name> <json-settings>', endpoint: 'launcher/app/settings', description: 'Update app settings.' },
   { id: 'launcher:app:create', group: 'launcher', usage: 'launcher app create <json-create-payload>', endpoint: 'launcher/app/create', description: 'Create app.' },
   { id: 'launcher:pro', group: 'launcher', usage: 'launcher pro', endpoint: 'launcher/pro', description: 'Promote launcher to Pro using local public key.' },
-  { id: 'terminal', group: 'terminal', usage: 'terminal <app> [pid]', endpoint: 'launcher/terminal', description: 'Stream raw terminal chunks/events.' },
-  { id: 'terminal:in', group: 'terminal', usage: 'terminal in <app> <data> [--pid <pid>] [--end]', endpoint: 'launcher/terminal/in', description: 'Send terminal input.' },
-  { id: 'terminal:resize', group: 'terminal', usage: 'terminal resize <app> <cols> <rows> [--pid <pid>]', endpoint: 'launcher/terminal/resize', description: 'Resize terminal.' },
   { id: 'devices', group: 'devices', usage: 'devices', endpoint: 'hub/devices', description: 'Print devices with services, presence and capabilities.' },
   { id: 'devices:pending', group: 'devices', usage: 'devices pending', endpoint: 'hub/devices/pending', description: 'Print devices waiting for approval with their safety codes.' },
   { id: 'device:approve', group: 'devices', usage: 'device approve <id>', endpoint: 'hub/device/approve', description: 'Approve a pending device (compare its safety code first).' },
@@ -218,9 +213,6 @@ const commandRunners: Record<string, CommandRunner> = {
   'launcher:app:settings': async (context, args) => ok(context, (await context.launcher()).updateAppSettings(expectArg(args, 0, 'name'), parseJsonRequired(args[1], 'json-settings') as LauncherSettings)),
   'launcher:app:create': async (context, args) => ok(context, (await context.launcher()).createApp(parseJsonRequired(args[0], 'json-create-payload') as LauncherCreate)),
   'launcher:pro': async context => ok(context, (await context.launcher()).promoteToPro(await context.keyStore.publicKey())),
-  terminal: async (context, args) => printStream(context, (await context.launcher()).terminal(expectArg(args, 0, 'app'), context.options.pid ?? optionalNumberArg(args[1], 'pid'))),
-  'terminal:in': async (context, args) => ok(context, (await context.launcher()).terminalInput(expectArg(args, 0, 'app'), expectRest(args, 1, 'data').join(' '), context.options.pid, context.options.end)),
-  'terminal:resize': async (context, args) => ok(context, (await context.launcher()).terminalResize(expectArg(args, 0, 'app'), parseNumberArg(args[1], 'cols'), parseNumberArg(args[2], 'rows'), context.options.pid)),
   devices: async context => context.log(await (await context.devices()).devices()),
   'devices:pending': async context => context.log(await (await context.devices()).pending()),
   'device:approve': async (context, args) => context.log(await (await context.devices()).approve(expectArg(args, 0, 'id'))),
@@ -418,7 +410,7 @@ function createContext(options: ExCommandOptions, env: ExEnvironment): ExContext
 
 function extractOptions(argv: string[]): { words: string[]; options: ExCommandOptions } {
   const words: string[] = []
-  const options: ExCommandOptions = { json: false, yes: false, end: false, help: false, device: false, keep: [], person: false }
+  const options: ExCommandOptions = { json: false, yes: false, help: false, device: false, keep: [], person: false }
 
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index]
@@ -426,8 +418,6 @@ function extractOptions(argv: string[]): { words: string[]; options: ExCommandOp
       options.json = true
     } else if (value === '--yes') {
       options.yes = true
-    } else if (value === '--end') {
-      options.end = true
     } else if (value === '--device') {
       options.device = true
     } else if (value === '--person') {
@@ -443,9 +433,6 @@ function extractOptions(argv: string[]): { words: string[]; options: ExCommandOp
       const service = argv[index + 1]
       if (!service) throw new Error('--service requires value')
       options.context = { service }
-      index += 1
-    } else if (value === '--pid') {
-      options.pid = parseNumberArg(argv[index + 1], 'pid')
       index += 1
     } else if (value?.startsWith('-')) {
       throw new Error(`Unknown option: ${value}`)
@@ -514,10 +501,6 @@ function route(words: string[]): { id: string; args: string[] } {
         if (third === 'create') return { id: 'launcher:app:create', args: words.slice(3) }
       }
       break
-    case 'terminal':
-      if (second === 'in') return { id: 'terminal:in', args: words.slice(2) }
-      if (second === 'resize') return { id: 'terminal:resize', args: words.slice(2) }
-      return { id: 'terminal', args: words.slice(1) }
     case 'host':
       if (second === 'pending') return { id: 'host:pending', args: words.slice(2) }
       if (second === 'allow') return { id: 'host:allow', args: words.slice(2) }

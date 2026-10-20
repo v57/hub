@@ -8,9 +8,6 @@ import type {
   LauncherProcessStatus,
   LauncherSettings,
   LauncherStatus,
-  LauncherTerminalInput,
-  LauncherTerminalRequest,
-  LauncherTerminalResize,
 } from '../types/launcher'
 
 export class LauncherControl {
@@ -84,33 +81,9 @@ export class LauncherControl {
     await this.client.send('launcher/app/cluster', { name, count })
   }
 
-  terminal(app: string, pid?: number, since?: number): AsyncIterable<unknown> {
-    return this.client.values('launcher/terminal', terminalRequest(app, pid, since))
-  }
-
-  async terminalInput(app: string, data: string, pid?: number, end?: boolean): Promise<void> {
-    await this.client.send('launcher/terminal/in', terminalInput(app, data, pid, end))
-  }
-
-  async terminalResize(app: string, cols: number, rows: number, pid?: number): Promise<void> {
-    await this.client.send('launcher/terminal/resize', terminalResize(app, cols, rows, pid))
-  }
-
   async processes(): Promise<LauncherProcessRow[]> {
     return flattenLauncherProcesses(await this.status())
   }
-}
-
-export function terminalRequest(app: string, pid?: number, since?: number): LauncherTerminalRequest {
-  return omitUndefined({ app, pid, since })
-}
-
-export function terminalInput(app: string, data: string, pid?: number, end?: boolean): LauncherTerminalInput {
-  return omitUndefined({ app, pid, data, end })
-}
-
-export function terminalResize(app: string, cols: number, rows: number, pid?: number): LauncherTerminalResize {
-  return omitUndefined({ app, pid, cols, rows })
 }
 
 export function flattenLauncherProcesses(status: LauncherStatus): LauncherProcessRow[] {

@@ -75,26 +75,6 @@ export interface LauncherStatus {
   raw?: unknown
 }
 
-export interface LauncherTerminalRequest {
-  app: string
-  pid?: number
-  since?: number
-}
-
-export interface LauncherTerminalInput {
-  app: string
-  pid?: number
-  data: string
-  end?: boolean
-}
-
-export interface LauncherTerminalResize {
-  app: string
-  pid?: number
-  cols: number
-  rows: number
-}
-
 export interface LauncherProcessRow extends LauncherProcessStatus {
   app: string
   started?: string

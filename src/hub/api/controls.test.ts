@@ -7,9 +7,6 @@ import {
   LauncherControl,
   normalizeLauncherInfo,
   normalizeLauncherStatus,
-  terminalInput,
-  terminalRequest,
-  terminalResize,
 } from './launcher-control'
 import {
   normalizeGroupList,
@@ -140,7 +137,6 @@ test('LauncherControl covers launcher streams, app actions, terminal I/O, and no
       { name: 'Hub', checkingForUpdates: false, updating: true, processes: [{ pid: 10, cpu: 1.5, memory: 2048 }], started: new Date('2026-05-05T00:00:00Z') },
     ],
   }])
-  client.streamResults.set('launcher/terminal', ['line'])
 
   expect(await control.info()).toMatchObject({ apps: [{ name: 'Hub', instances: 2, terminal: { cols: 80 } }] })
   expect(await control.status()).toMatchObject({ apps: { Hub: { updating: true, processes: [{ pid: 10 }] } } })
@@ -157,9 +153,6 @@ test('LauncherControl covers launcher streams, app actions, terminal I/O, and no
   await control.createApp({ name: 'Test', active: true, restarts: false, setup: { type: 'sh', run: 'bun start' } })
   await control.updateAppSettings('Hub', { env: { PORT: '1997' }, secrets: { TOKEN: 'x' } })
   await control.setAppClusterCount('Hub', 3)
-  expect(await first(control.terminal('Hub', 10, 20))).toBe('line')
-  await control.terminalInput('Hub', 'ls\n', 10, true)
-  await control.terminalResize('Hub', 120, 40, 10)
 
   expect(paths(client.sends)).toEqual([
     'launcher/update/check',
@@ -175,17 +168,9 @@ test('LauncherControl covers launcher streams, app actions, terminal I/O, and no
     'launcher/app/create',
     'launcher/app/settings',
     'launcher/app/cluster',
-    'launcher/terminal/in',
-    'launcher/terminal/resize',
   ])
-  expect(client.sends.at(-4)).toEqual({ path: 'launcher/app/settings', body: { app: 'Hub', settings: { env: { PORT: '1997' }, secrets: { TOKEN: 'x' } } }, context: undefined })
-  expect(client.sends.at(-3)).toEqual({ path: 'launcher/app/cluster', body: { name: 'Hub', count: 3 }, context: undefined })
-  expect(client.sends.at(-2)).toEqual({ path: 'launcher/terminal/in', body: { app: 'Hub', pid: 10, data: 'ls\n', end: true }, context: undefined })
-  expect(client.sends.at(-1)).toEqual({ path: 'launcher/terminal/resize', body: { app: 'Hub', pid: 10, cols: 120, rows: 40 }, context: undefined })
-  expect(client.streams).toContainEqual({ path: 'launcher/terminal', body: { app: 'Hub', pid: 10, since: 20 }, context: undefined })
-  expect(terminalRequest('Hub')).toEqual({ app: 'Hub' })
-  expect(terminalInput('Hub', 'x')).toEqual({ app: 'Hub', data: 'x' })
-  expect(terminalResize('Hub', 80, 24)).toEqual({ app: 'Hub', cols: 80, rows: 24 })
+  expect(client.sends.at(-2)).toEqual({ path: 'launcher/app/settings', body: { app: 'Hub', settings: { env: { PORT: '1997' }, secrets: { TOKEN: 'x' } } }, context: undefined })
+  expect(client.sends.at(-1)).toEqual({ path: 'launcher/app/cluster', body: { name: 'Hub', count: 3 }, context: undefined })
   expect(normalizeLauncherInfo({ Hub: { name: 'Hub' } })).toMatchObject({ apps: [{ name: 'Hub', instances: 1 }] })
   const normalizedStatus = normalizeLauncherStatus({ Hub: { name: 'Hub', processes: [{ pid: 1 }] } })
   expect(flattenLauncherProcesses(normalizedStatus)).toMatchObject([{ app: 'Hub', pid: 1 }])
