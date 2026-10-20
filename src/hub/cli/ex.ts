@@ -25,6 +25,8 @@ export interface ExCommandOptions {
   yes: boolean
   end: boolean
   help: boolean
+  /** Connect as this device (send a certificate from the device key); off by default. */
+  device: boolean
   context?: HubContext
   pid?: number
 }
@@ -278,7 +280,7 @@ export function formatHelp(topics: string[] = []): string {
 
   const groups = Array.from(new Set(entries.map(entry => entry.group)))
   const lines = [
-    'Usage: bun ex <command> [subcommand] [...args] [--json] [--service <id>]',
+    'Usage: bun ex <command> [subcommand] [...args] [--json] [--service <id>] [--device]',
     '',
     `Groups: ${groups.join(', ')}`,
     '',
@@ -301,7 +303,7 @@ function createContext(options: ExCommandOptions, env: ExEnvironment): ExContext
   const connections = env.connections ?? new BunFileConnectionStore()
   const keyStore = env.keyStore ?? defaultCliKeyStore()
   const hubKeys = env.hubKeys ?? new BunFileHubKeyStore()
-  const device = env.device
+  const device = options.device ? (env.device ?? new DeviceIdentity()) : undefined
   const log = env.log ?? console.log
   let client: HubRuntimeClient | undefined
   let hub: HubControl | undefined
@@ -357,7 +359,7 @@ function createContext(options: ExCommandOptions, env: ExEnvironment): ExContext
 
 function extractOptions(argv: string[]): { words: string[]; options: ExCommandOptions } {
   const words: string[] = []
-  const options: ExCommandOptions = { json: false, yes: false, end: false, help: false }
+  const options: ExCommandOptions = { json: false, yes: false, end: false, help: false, device: false }
 
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index]
@@ -367,6 +369,8 @@ function extractOptions(argv: string[]): { words: string[]; options: ExCommandOp
       options.yes = true
     } else if (value === '--end') {
       options.end = true
+    } else if (value === '--device') {
+      options.device = true
     } else if (value === '--help' || value === '-h') {
       options.help = true
     } else if (value === '--service') {

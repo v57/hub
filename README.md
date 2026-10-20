@@ -68,6 +68,19 @@ Use `sudo` if your OS needs admin rights for the system-level startup location.
 
 - `hub status` - show whether launcher is running, how autolaunch is set, and whether updates are available
 
+### Hub Client and Identity
+
+- `hub client [page]` - open the Hub client terminal UI (`hub client --help` lists the pages)
+- `hub client --device` - connect as this device instead of as a plain key
+
+The client signs in with its own key (kept in the OS keychain through Bun.secrets) and is a client without a device:
+no device grants, shares or device data. With `--device` it also sends a certificate from the device key
+(`HUB_DEVICE_KEY`, or `~/.hub/device.key`, created if missing) so the hub attaches it to this device.
+
+On the first connection to a hub the client asks `hub/info` for the hub key and pins it per address in
+`~/.hub-lib/hubs.json`; from then on its tokens only work on that hub. If the hub later refuses the token with
+`invalid signature`, the hub key changed or another server answers at that address: check it, then forget the pin.
+
 ## Command Cheatsheet
 
 | Command | What it does |

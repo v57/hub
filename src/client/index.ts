@@ -116,6 +116,7 @@ export function clientHelpText(): string {
     '',
     'Options:',
     '  --smoke     Render one deterministic frame and exit',
+    '  --device    Connect as this device (certificate from ~/.hub/device.key); key only by default',
     '  -h, --help  Show this help message',
     '',
   ].join('\n')
@@ -131,8 +132,8 @@ function isClientHelpRequest(args: string[]): boolean {
 
 function parseClientCommand(args: string[]): ClientCommand {
   const smoke = args.includes('--smoke')
-  const device = false
-  const routeArgs = args.filter(arg => arg !== '--smoke')
+  const device = args.includes('--device')
+  const routeArgs = args.filter(arg => arg !== '--smoke' && arg !== '--device')
   return {
     route: resolveClientRoute(routeArgs),
     smoke,

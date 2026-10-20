@@ -7,7 +7,7 @@ import { clientHelpText, createHubClientView, renderHubClientFrame, runHubClient
 import { normalizeHubAddress } from './pages/connect'
 import { MemoryTerminalDevice, Terminal } from './terminal'
 import type { KeyStore } from '../hub'
-import { MemoryConnectionStore } from '../hub'
+import { DeviceIdentity, MemoryConnectionStore, MemoryKeyStore } from '../hub'
 
 const scaffoldedPageFiles = [
   'home.ts',
@@ -674,4 +674,29 @@ test('all scaffolded pages keep their Page spec comments and route contracts', (
     expect(source.trimStart().startsWith('/**')).toBe(true)
     expect(source.slice(0, 600)).toContain('Page spec:')
   }
+})
+
+test('client command probes as a key-only client unless --device is passed', async () => {
+  const connectionStore = new MemoryConnectionStore({
+    connections: [{ id: 'local-hub', name: 'Local Hub', address: 'ws://localhost:1997' }],
+    selectedId: 'local-hub',
+  })
+  const deviceIdentity = new DeviceIdentity({ path: '/nonexistent/device.key' })
+  const seen: (DeviceIdentity | undefined)[] = []
+  for (const args of [[], ['--device']]) {
+    const device = new MemoryTerminalDevice({ width: 80, height: 24 })
+    await runHubClientCommand({
+      args,
+      device,
+      connectionStore,
+      deviceIdentity,
+      keyStore: new MemoryKeyStore(),
+      connectionProbe: async (_connection, _keyStore, auth) => {
+        seen.push(auth.device)
+        return { connected: false }
+      },
+    })
+    device.emitKey({ key: 'ctrl-c' })
+  }
+  expect(seen).toEqual([undefined, deviceIdentity])
 })
