@@ -78,6 +78,7 @@ export function normalizeDevice(value: unknown): HubDevice | undefined {
     revoked: item.revoked === true,
     online: item.online === true,
     network: item.network === 'online' || item.network === 'offline' ? item.network : undefined,
+    overlay: normalizeOverlay(item.overlay),
     lastSeen: optionalString(item.lastSeen),
     capabilities: asRecord(item.capabilities) as HubDeviceCapabilities | undefined,
     services: (Array.isArray(item.services) ? item.services : [])
@@ -158,6 +159,12 @@ export function formatBytes(value: number): string {
     unit += 1
   }
   return `${size >= 10 || unit === 0 ? Math.round(size) : size.toFixed(1)} ${units[unit]}`
+}
+
+function normalizeOverlay(value: unknown): HubDevice['overlay'] {
+  const item = asRecord(value)
+  const address = optionalString(item?.address)
+  return address ? { address, authority: optionalString(item?.authority) ?? '' } : undefined
 }
 
 function normalizeDeviceService(value: unknown): HubDeviceService | undefined {

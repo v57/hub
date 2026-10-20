@@ -114,6 +114,7 @@ export {
   BunFileHubKeyStore,
   MemoryHubKeyStore,
   defaultHubKeyStoreFileName,
+  hubKeyAddress,
   type BunFileHubKeyStoreOptions,
   type HubKeyStore,
 } from './auth/hub-key-store'

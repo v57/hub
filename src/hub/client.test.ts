@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import vectors from './auth/testdata/device-vectors.json'
 import { decodeServiceCertificate, DeviceIdentity } from './auth/device-key'
-import { BunFileHubKeyStore, MemoryHubKeyStore } from './auth/hub-key-store'
+import { BunFileHubKeyStore, hubKeyAddress, MemoryHubKeyStore } from './auth/hub-key-store'
 import { MemoryKeyStore } from './auth/memory-key-store'
 import { HubClient, type HubConnectionHeaders, type HubSenderLike, type HubServiceOptions } from './client'
 
@@ -110,6 +110,13 @@ test('device mode adds a certificate for the client key', async () => {
   } finally {
     await rm(directory, { recursive: true, force: true })
   }
+})
+
+test('pin keys are the dialed URL normalized like channel TS', () => {
+  expect(hubKeyAddress(1997)).toBe('ws://localhost:1997')
+  expect(hubKeyAddress('1997')).toBe('ws://localhost:1997')
+  expect(hubKeyAddress('WSS://Hub.Example.COM/Path/')).toBe('wss://hub.example.com/Path')
+  expect(hubKeyAddress('ws://hub.local:1997/')).toBe('ws://hub.local:1997')
 })
 
 test('file hub key store keeps pins per normalized address', async () => {

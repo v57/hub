@@ -36,6 +36,7 @@ export const macStudio = {
   revoked: false,
   online: true,
   network: 'online',
+  overlay: { address: '100.96.0.7', authority: 'mac-studio-abcdefghijklmnop.v1-hub.hub.invalid' },
   lastSeen: '2026-10-20T10:00:00.000Z',
   capabilities: {
     cpu: { cores: 24, model: 'M3 Ultra' },

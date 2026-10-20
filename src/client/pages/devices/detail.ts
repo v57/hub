@@ -9,7 +9,8 @@
  *
  * What page displays:
  * - Device facts: name, id, key, platform / OS / architecture, declared parent,
- *   approval, hub presence, Hub Network presence and last seen time.
+ *   approval, hub presence, Hub Network presence, overlay address with its
+ *   device-name authority (for SSH by name) and last seen time.
  * - Capabilities (claims by the device; they steer placement and never grant
  *   access): CPU, memory, GPU, disks, power, tools, SSH.
  * - Services certified by the device with instance, name, presence and paths.
@@ -102,6 +103,7 @@ function factRows(device: HubDevice): [string, string][] {
     ['System', system || '-'],
     ...(device.parent ? [['Parent', device.parent] as [string, string]] : []),
     ['Network', device.network ?? 'not a member'],
+    ...(device.overlay ? [['Overlay', [device.overlay.address, device.overlay.authority].filter(Boolean).join('  ')] as [string, string]] : []),
     ['Last seen', device.lastSeen ?? '-'],
   ]
 }

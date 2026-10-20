@@ -31,6 +31,8 @@ export interface HubDevice {
   revoked: boolean
   online: boolean
   network?: 'online' | 'offline'
+  /** Hub Network overlay address and the device-name authority that resolves to it. */
+  overlay?: { address: string; authority: string }
   lastSeen?: string
   capabilities?: HubDeviceCapabilities
   services: HubDeviceService[]

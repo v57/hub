@@ -14,20 +14,29 @@ export interface HubKeyStore {
   list(): Promise<Record<string, string>>
 }
 
+/** The `hubs.json` key: the dialed URL with a bare port as `ws://localhost:<port>`, lowercased scheme and host, no trailing slash. */
+export function hubKeyAddress(address: HubAddress): string {
+  const raw = typeof address === 'string' ? address.trim().replace(/^[a-z][a-z0-9+.-]*:\/\//i, scheme => scheme.toLowerCase()) : address
+  const url = normalizeHubAddress(raw)
+  const match = url.match(/^([a-z][a-z0-9+.-]*:\/\/)([^/?#]*)(.*)$/i)
+  if (!match) return url
+  return `${match[1]!.toLowerCase()}${match[2]!.toLowerCase()}${match[3]!.replace(/\/+$/, '')}`
+}
+
 export abstract class BaseHubKeyStore implements HubKeyStore {
   async get(address: HubAddress): Promise<string | undefined> {
-    return (await this.load())[normalizeHubAddress(address)]
+    return (await this.load())[hubKeyAddress(address)]
   }
 
   async pin(address: HubAddress, hubKey: string): Promise<void> {
     const pins = await this.load()
-    pins[normalizeHubAddress(address)] = hubKey
+    pins[hubKeyAddress(address)] = hubKey
     await this.save(pins)
   }
 
   async forget(address: HubAddress): Promise<boolean> {
     const pins = await this.load()
-    const normalized = normalizeHubAddress(address)
+    const normalized = hubKeyAddress(address)
     if (!(normalized in pins)) return false
     delete pins[normalized]
     await this.save(pins)

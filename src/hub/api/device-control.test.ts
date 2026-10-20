@@ -39,6 +39,8 @@ test('DeviceControl streams devices and sends exact device payloads', async () =
 
 test('device normalizers tolerate partial records', () => {
   expect(normalizeDevices(null)).toEqual([])
+  expect(normalizeDevices([macStudio])[0]!.overlay).toEqual(macStudio.overlay)
+  expect(normalizeDevices([{ id: 'x', overlay: { authority: 'a' } }])[0]!.overlay).toBeUndefined()
   expect(normalizeDevices([{ id: 'x' }])[0]).toMatchObject({ id: 'x', name: 'x', approved: false, revoked: false, online: false, services: [] })
   expect(normalizePendingDevices({ devices: [{ id: 'b', firstSeen: '2' }, { id: 'a', firstSeen: '1' }] }).map(device => device.id)).toEqual(['a', 'b'])
 })

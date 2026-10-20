@@ -28,6 +28,7 @@ test('devices page lists devices with services, presence, capabilities and pendi
   expect(frame).toContain('Safety code 474 971')
   expect(frame).toContain('Mac Studio')
   expect(frame).toContain('online, net online')
+  expect(frame).toContain('100.96.0.7')
   expect(frame).toContain('revoked')
   expect(frame).toContain('1/2')
   expect(frame).toContain('M3 Ultra 24 cores')
@@ -57,6 +58,7 @@ test('device page shows live data and revokes while keeping chosen service keys'
   expect(frame).toContain('CPU 50% / Battery 30% / Network cellular')
   expect(frame).toContain('uptime: 12')
   expect(frame).toContain('Simulators iPhone 18 Pro')
+  expect(frame).toContain('Overlay    100.96.0.7  mac-studio-abcdefghijklmnop.v1-hub.hub.invalid')
   expect(client.streams.at(-1)).toEqual({ path: 'hub/devices/data', body: { id: macStudio.id } })
 
   await press(view, 'Revoke…')

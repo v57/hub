@@ -14,8 +14,8 @@
  *   platform, declared parent, first seen time and safety code. The safety code
  *   is shown on the device too; the owner compares both before approving.
  * - Devices: table of `hub/devices` with name, platform, presence (hub presence
- *   and, when known, Hub Network presence), service count and a capability
- *   summary. Revoked devices stay listed as tombstones.
+ *   and, when known, Hub Network presence), Hub Network overlay address,
+ *   service count and a capability summary. Revoked devices stay listed as tombstones.
  * - Selected device card: its services (instance, name, online, path count) and
  *   a link to the device page (rename, remove, revoke, live data).
  *
@@ -41,6 +41,7 @@ import type { ClientPage, ClientPageState } from './types'
 type DeviceRow = HubDevice & {
   platformText: string
   presenceText: string
+  overlayText: string
   servicesText: string
   capabilityText: string
 }
@@ -73,6 +74,7 @@ export const devicesPage: ClientPage = {
           { header: 'Name', width: { flexible: 1, min: 12 }, cell: 'name' },
           { header: 'Platform', width: 10, cell: 'platformText' },
           { header: 'Presence', width: 16, cell: 'presenceText' },
+          { header: 'Overlay', width: 15, cell: 'overlayText' },
           { header: 'Services', width: 8, cell: 'servicesText' },
           { header: 'Capabilities', width: { flexible: 2, min: 16 }, cell: 'capabilityText' },
         ], {
@@ -136,6 +138,7 @@ export function deviceRows(devices: HubDevice[]): DeviceRow[] {
     ...device,
     platformText: device.platform ?? '-',
     presenceText: presenceText(device),
+    overlayText: device.overlay?.address ?? '-',
     servicesText: `${device.services.filter(service => service.online).length}/${device.services.length}`,
     capabilityText: deviceCapabilitySummary(device.capabilities),
   }))
