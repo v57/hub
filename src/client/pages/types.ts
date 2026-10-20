@@ -1,5 +1,5 @@
 import type { ViewNode } from '../terminal'
-import type { HubBalancerType } from '../../hub'
+import type { DeviceControl, HubBalancerType, HubDevice, HubDeviceData, HubPendingDevice, SecurityControl } from '../../hub'
 
 export const clientRouteIds = [
   'home',
@@ -15,6 +15,8 @@ export const clientRouteIds = [
   'security/permission-groups',
   'security/user-connections',
   'security/lockdown',
+  'devices',
+  'devices/detail',
 ] as const
 
 export type ClientRouteId = typeof clientRouteIds[number]
@@ -114,7 +116,16 @@ export interface ClientHubUser {
   apps?: number
 }
 
+/** Controls for the selected hub; pages that have them stream live data and send actions. */
+export interface ClientLive {
+  devices: DeviceControl
+  security: SecurityControl
+}
+
 export interface ClientPageState {
+  live?: ClientLive
+  /** Redraws after an async action or stream update; set by the visible page's task. */
+  refresh?: () => void
   connections: ClientConnectionSummary[]
   selectedConnectionId?: string
   loading?: boolean
@@ -192,6 +203,14 @@ export interface ClientPageState {
   users?: ClientHubUser[]
   lockdownEnabled?: boolean
   trustedKeys?: string[]
+  devices?: HubDevice[]
+  pendingDevices?: HubPendingDevice[]
+  selectedDeviceId?: string
+  deviceData?: Record<string, HubDeviceData>
+  deviceNotice?: string
+  deviceNameDraft?: string
+  deviceRevokeArmed?: boolean
+  deviceKeepServices?: string[]
 }
 
 export interface ClientPageContext {
@@ -285,5 +304,15 @@ export function createClientPageState(state: Partial<ClientPageState> = {}): Cli
     users: state.users ?? [],
     lockdownEnabled: state.lockdownEnabled ?? false,
     trustedKeys: state.trustedKeys ?? [],
+    live: state.live,
+    refresh: state.refresh,
+    devices: state.devices ?? [],
+    pendingDevices: state.pendingDevices ?? [],
+    selectedDeviceId: state.selectedDeviceId,
+    deviceData: state.deviceData ?? {},
+    deviceNotice: state.deviceNotice,
+    deviceNameDraft: state.deviceNameDraft ?? '',
+    deviceRevokeArmed: state.deviceRevokeArmed ?? false,
+    deviceKeepServices: state.deviceKeepServices ?? [],
   }
 }

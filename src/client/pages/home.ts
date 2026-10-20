@@ -73,6 +73,7 @@
  *
  * Hub section navigation targets:
  * - Services -> `services.ts`.
+ * - Devices -> `devices.ts`.
  * - Connections -> `security/user-connections.ts`.
  * - Requests -> `security/pending-list.ts`.
  * - Permissions -> `security/permission-groups.ts`.
@@ -217,13 +218,14 @@ function hubPageLinks() {
     HStack(
       [
         RouteLink('Services', 'services'),
+        RouteLink('Devices', 'devices'),
         RouteLink('Launcher', 'launcher'),
         RouteLink('Storage Setup', 'help/install-s3'),
       ],
       { spacing: 2 },
     ),
     Text(
-      'Services, Launcher, and Storage Setup open Hub-specific API, app, process, and file-provider workflows.',
+      'Services, Devices, Launcher, and Storage Setup open Hub-specific API, device, app, process, and file-provider workflows.',
     ).foregroundColor('secondary'),
   ]
 }

@@ -2,6 +2,7 @@ import { basename } from 'node:path'
 import {
   AppControl,
   BunFileConnectionStore,
+  DeviceControl,
   BunFileHubKeyStore,
   DeviceIdentity,
   HubClient,
@@ -27,6 +28,8 @@ export interface ExCommandOptions {
   help: boolean
   /** Connect as this device (send a certificate from the device key); off by default. */
   device: boolean
+  /** Service keys to keep on `device revoke`. */
+  keep: string[]
   context?: HubContext
   pid?: number
 }
@@ -68,6 +71,7 @@ interface ExContext {
   hub(): Promise<HubControl>
   launcher(): Promise<LauncherControl>
   security(): Promise<SecurityControl>
+  devices(): Promise<DeviceControl>
   storage(): Promise<StorageControl>
   app(): Promise<AppControl>
   stop(): void
@@ -110,6 +114,13 @@ const helpEntries: HelpEntry[] = [
   { id: 'terminal', group: 'terminal', usage: 'terminal <app> [pid]', endpoint: 'launcher/terminal', description: 'Stream raw terminal chunks/events.' },
   { id: 'terminal:in', group: 'terminal', usage: 'terminal in <app> <data> [--pid <pid>] [--end]', endpoint: 'launcher/terminal/in', description: 'Send terminal input.' },
   { id: 'terminal:resize', group: 'terminal', usage: 'terminal resize <app> <cols> <rows> [--pid <pid>]', endpoint: 'launcher/terminal/resize', description: 'Resize terminal.' },
+  { id: 'devices', group: 'devices', usage: 'devices', endpoint: 'hub/devices', description: 'Print devices with services, presence and capabilities.' },
+  { id: 'devices:pending', group: 'devices', usage: 'devices pending', endpoint: 'hub/devices/pending', description: 'Print devices waiting for approval with their safety codes.' },
+  { id: 'device:approve', group: 'devices', usage: 'device approve <id>', endpoint: 'hub/device/approve', description: 'Approve a pending device (compare its safety code first).' },
+  { id: 'device:rename', group: 'devices', usage: 'device rename <id> <name>', endpoint: 'hub/device/rename', description: 'Rename device.' },
+  { id: 'device:remove', group: 'devices', usage: 'device remove <id>', endpoint: 'hub/device/remove', description: 'Remove device; it can enrol again.' },
+  { id: 'device:revoke', group: 'devices', usage: 'device revoke <id> --yes [--keep <service-key>]...', endpoint: 'hub/device/revoke', description: 'Revoke a lost device and its service keys, except kept ones.' },
+  { id: 'device:data', group: 'devices', usage: 'device data <id>', endpoint: 'hub/devices/data', description: 'Stream live device data.' },
   { id: 'connections:users', group: 'security', usage: 'connections users', endpoint: 'hub/connections', description: 'Print connected Hub users.' },
   { id: 'host:pending', group: 'security', usage: 'host pending', endpoint: 'hub/host/pending', description: 'Print pending host permissions.' },
   { id: 'host:allow', group: 'security', usage: 'host allow <key> <path...>', endpoint: 'hub/host/update', description: 'Allow host permissions.' },
@@ -197,6 +208,16 @@ const commandRunners: Record<string, CommandRunner> = {
   terminal: async (context, args) => printStream(context, (await context.launcher()).terminal(expectArg(args, 0, 'app'), context.options.pid ?? optionalNumberArg(args[1], 'pid'))),
   'terminal:in': async (context, args) => ok(context, (await context.launcher()).terminalInput(expectArg(args, 0, 'app'), expectRest(args, 1, 'data').join(' '), context.options.pid, context.options.end)),
   'terminal:resize': async (context, args) => ok(context, (await context.launcher()).terminalResize(expectArg(args, 0, 'app'), parseNumberArg(args[1], 'cols'), parseNumberArg(args[2], 'rows'), context.options.pid)),
+  devices: async context => context.log(await (await context.devices()).devices()),
+  'devices:pending': async context => context.log(await (await context.devices()).pending()),
+  'device:approve': async (context, args) => context.log(await (await context.devices()).approve(expectArg(args, 0, 'id'))),
+  'device:rename': async (context, args) => context.log(await (await context.devices()).rename(expectArg(args, 0, 'id'), expectRest(args, 1, 'name').join(' '))),
+  'device:remove': async (context, args) => ok(context, (await context.devices()).remove(expectArg(args, 0, 'id'))),
+  'device:revoke': async (context, args) => {
+    if (!context.options.yes) throw new Error('device revoke requires --yes')
+    await ok(context, (await context.devices()).revoke(expectArg(args, 0, 'id'), context.options.keep))
+  },
+  'device:data': async (context, args) => printStream(context, (await context.devices()).watchData(expectArg(args, 0, 'id'))),
   'connections:users': async context => context.log(await (await context.hub()).connections()),
   'host:pending': async context => context.log(await (await context.security()).hostPending()),
   'host:allow': async (context, args) => ok(context, (await context.security()).allowHost(expectArg(args, 0, 'key'), expectRest(args, 1, 'path'))),
@@ -309,6 +330,7 @@ function createContext(options: ExCommandOptions, env: ExEnvironment): ExContext
   let hub: HubControl | undefined
   let launcher: LauncherControl | undefined
   let security: SecurityControl | undefined
+  let devices: DeviceControl | undefined
   let storage: StorageControl | undefined
   let app: AppControl | undefined
 
@@ -343,6 +365,10 @@ function createContext(options: ExCommandOptions, env: ExEnvironment): ExContext
       security ??= new SecurityControl(await this.client())
       return security
     },
+    async devices() {
+      devices ??= new DeviceControl(await this.client())
+      return devices
+    },
     async storage() {
       storage ??= new StorageControl(await this.client(), { fetch: env.fetch, onProgress: progress => this.log(progress) })
       return storage
@@ -359,7 +385,7 @@ function createContext(options: ExCommandOptions, env: ExEnvironment): ExContext
 
 function extractOptions(argv: string[]): { words: string[]; options: ExCommandOptions } {
   const words: string[] = []
-  const options: ExCommandOptions = { json: false, yes: false, end: false, help: false, device: false }
+  const options: ExCommandOptions = { json: false, yes: false, end: false, help: false, device: false, keep: [] }
 
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index]
@@ -371,6 +397,11 @@ function extractOptions(argv: string[]): { words: string[]; options: ExCommandOp
       options.end = true
     } else if (value === '--device') {
       options.device = true
+    } else if (value === '--keep') {
+      const key = argv[index + 1]
+      if (!key) throw new Error('--keep requires value')
+      options.keep.push(key)
+      index += 1
     } else if (value === '--help' || value === '-h') {
       options.help = true
     } else if (value === '--service') {
@@ -413,6 +444,13 @@ function route(words: string[]): { id: string; args: string[] } {
       return { id: first, args: words.slice(1) }
     case 'info':
       return { id: 'info', args: words.slice(1) }
+    case 'devices':
+      return second === 'pending' ? { id: 'devices:pending', args: words.slice(2) } : { id: 'devices', args: words.slice(1) }
+    case 'device':
+      if (second === 'approve' || second === 'rename' || second === 'remove' || second === 'revoke' || second === 'data') {
+        return { id: `device:${second}`, args: words.slice(2) }
+      }
+      break
     case 'hubkey':
       return second === 'forget' ? { id: 'hubkey:forget', args: words.slice(2) } : { id: 'hubkey', args: words.slice(1) }
     case 'key':

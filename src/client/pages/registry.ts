@@ -1,4 +1,6 @@
 import { connectPage } from './connect'
+import { devicesPage } from './devices'
+import { deviceDetailPage } from './devices/detail'
 import { installHubPage } from './help/install-hub'
 import { installS3Page } from './help/install-s3'
 import { homePage } from './home'
@@ -27,6 +29,8 @@ export const clientPages: ClientPage[] = [
   permissionGroupsPage,
   userConnectionsPage,
   lockdownPage,
+  devicesPage,
+  deviceDetailPage,
 ]
 
 const pagesByRoute = new Map<ClientRouteId, ClientPage>(clientPages.map(page => [page.route, page]))

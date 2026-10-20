@@ -33,6 +33,16 @@ export {
   terminalResize,
 } from './api/launcher-control'
 export {
+  DeviceControl,
+  deviceCapabilitySummary,
+  deviceDataSummary,
+  formatBytes,
+  normalizeDevice,
+  normalizeDeviceData,
+  normalizeDevices,
+  normalizePendingDevices,
+} from './api/device-control'
+export {
   SecurityControl,
   normalizeGroupList,
   normalizePendingPermissions,
@@ -151,6 +161,14 @@ export type {
   PendingPermission,
   ServiceProvider,
 } from './types/runtime'
+export type {
+  HubDevice,
+  HubDeviceCapabilities,
+  HubDeviceData,
+  HubDeviceRevoke,
+  HubDeviceService,
+  HubPendingDevice,
+} from './types/devices'
 export type {
   LauncherAppInfo,
   LauncherAppStatus,

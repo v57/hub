@@ -52,3 +52,28 @@ test('hubkey prints and forgets the pin of the selected hub', async () => {
   await runExCommand(['hubkey'], env)
   expect(lines).toEqual(['HUBKEY', '{"forgotten":true}', 'not pinned'])
 })
+
+test('device commands send the device API payloads', async () => {
+  const { client, calls } = recordingClient(path => (path === 'hub/devices' ? [{ id: 'd1', name: 'Mac' }] : undefined))
+  const lines: string[] = []
+  const env = {
+    connections: new MemoryConnectionStore(),
+    keyStore: new MemoryKeyStore(),
+    hubKeys: new MemoryHubKeyStore(),
+    log: (line: string) => lines.push(line),
+    createClient: () => client,
+  }
+  await runExCommand(['devices', '--json'], env)
+  await runExCommand(['device', 'approve', 'd1'], env)
+  await runExCommand(['device', 'rename', 'd1', 'Mac', 'Studio'], env)
+  await runExCommand(['device', 'remove', 'd1'], env)
+  await expect(runExCommand(['device', 'revoke', 'd1'], env)).rejects.toThrow('--yes')
+  await runExCommand(['device', 'revoke', 'd1', '--yes', '--keep', 'K1', '--keep', 'K2'], env)
+  expect(JSON.parse(lines[0]!)[0]).toMatchObject({ id: 'd1', name: 'Mac', approved: false })
+  expect(calls.slice(1)).toEqual([
+    { path: 'hub/device/approve', body: { id: 'd1' } },
+    { path: 'hub/device/rename', body: { id: 'd1', name: 'Mac Studio' } },
+    { path: 'hub/device/remove', body: { id: 'd1' } },
+    { path: 'hub/device/revoke', body: { id: 'd1', keepServices: ['K1', 'K2'] } },
+  ])
+})

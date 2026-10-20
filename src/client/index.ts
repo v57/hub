@@ -2,9 +2,11 @@ import { MemoryTerminalDevice, NavigationStack, State, Terminal, type TerminalDe
 import { clientPages, renderClientRoute } from './pages/registry'
 import { clientRouteIds, createClientPageState, type ClientPageState, type ClientRouteId } from './pages/types'
 import {
+  DeviceControl,
   DeviceIdentity,
   HubClient,
   HubControl,
+  SecurityControl,
   MemoryHubKeyStore,
   createDefaultKeyStore,
   type ConnectionStore,
@@ -190,6 +192,12 @@ async function resolveStartupState(options: RunHubClientCommandOptions, auth: Co
       }
       state.connections = summaries
       state.selectedConnectionId = selectedId
+      const active = summaries.find(connection => connection.id === selectedId)
+      if (active && !state.live) {
+        // Connects on the first request, which only pages with live data make.
+        const client = new HubClient({ address: active.address, keyStore, hubKeys: auth.hubKeys, device: auth.device })
+        state.live = { devices: new DeviceControl(client), security: new SecurityControl(client) }
+      }
     }
   } catch {
     // Keep the client usable if the saved connection store is unavailable.
