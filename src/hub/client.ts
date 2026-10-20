@@ -54,6 +54,8 @@ export interface HubSenderLike {
   stop?(): void
   ws?: {
     isConnected?: boolean
+    /** Channel sets it to false when the server answers the upgrade without a WebSocket (refused, or not a hub). */
+    isRunning?: boolean
     stop?(): void
   }
 }
@@ -68,6 +70,7 @@ export class HubClient {
   info?: HubInfo
   private readonly serviceFactory: HubServiceFactory
   private readonly suppliedHubKey?: string
+  private lastConnectVersion?: string
   private service?: HubServiceLike
   private hasStarted = false
   private hasStopped = false
@@ -118,6 +121,7 @@ export class HubClient {
    */
   async connectHeaders(): Promise<HubConnectionHeaders> {
     const headers: HubConnectionHeaders = await this.keyStore.authHeaders(authExpiresSeconds, await this.hubKey())
+    this.lastConnectVersion = headers.v
     if (this.device) headers.device = await this.device.certificate(await this.keyStore.publicKey())
     return headers
   }
@@ -147,7 +151,7 @@ export class HubClient {
     try {
       const service = this.ensureStarted()
       const sender = service.sender
-      if (sender) return (await sender.send(path, body, { context })) as T
+      if (sender) return (await this.untilRefused(sender.send(path, body, { context }), path)) as T
       if (service.send) return (await service.send(path, body, context)) as T
       throw new HubError('Hub service sender unavailable', { kind: 'connection', path })
     } catch (error) {
@@ -159,7 +163,7 @@ export class HubClient {
     try {
       const service = this.ensureStarted()
       const sender = service.sender
-      if (sender) return sender.values(path, body, { context }) as AsyncIterable<T>
+      if (sender) return this.valuesUntilRefused(sender.values(path, body, { context }) as AsyncIterable<T>, path)
       if (service.values) return service.values(path, body, context) as AsyncIterable<T>
       throw new HubError('Hub service sender unavailable', { kind: 'connection', path })
     } catch (error) {
@@ -188,6 +192,58 @@ export class HubClient {
     this.service?.sender?.ws?.stop?.()
     this.hasStopped = true
     this.hasStarted = false
+  }
+
+  /**
+   * The hub refused the connection: channel stops reconnecting after an upgrade without a WebSocket, so requests would
+   * wait forever. With a pinned hub key that is how a refused `v: 1` token shows.
+   */
+  refusal(): HubError | undefined {
+    const ws = this.service?.sender?.ws
+    if (!this.hasStarted || this.hasStopped || !ws || ws.isRunning !== false) return undefined
+    const pinned = this.lastConnectVersion === '1'
+    return new HubError(`${this.address} refused the connection`, {
+      kind: pinned ? 'auth' : 'connection',
+      hint: pinned
+        ? 'The hub refused the token bound to its pinned key: the hub key changed or another server answers at this address. If that is expected, forget the pinned key (hubkey forget) and connect again.'
+        : 'The address answered without a Hub WebSocket.',
+    })
+  }
+
+  private untilRefused<T>(promise: Promise<T>, path: string): Promise<T> {
+    if (this.connected) return promise
+    return new Promise((resolve, reject) => {
+      const timer = setInterval(() => {
+        const refusal = this.refusal()
+        if (refusal) {
+          refusal.path = path
+          reject(refusal)
+        }
+        if (refusal || this.connected) clearInterval(timer)
+      }, 100)
+      promise.then(
+        value => {
+          clearInterval(timer)
+          resolve(value)
+        },
+        error => {
+          clearInterval(timer)
+          reject(error)
+        },
+      )
+    })
+  }
+
+  private valuesUntilRefused<T>(values: AsyncIterable<T>, path: string): AsyncIterable<T> {
+    return {
+      [Symbol.asyncIterator]: () => {
+        const iterator = values[Symbol.asyncIterator]()
+        return {
+          next: () => this.untilRefused(iterator.next(), path),
+          return: value => iterator.return?.(value) ?? Promise.resolve({ done: true as const, value }),
+        }
+      },
+    }
   }
 
   private ensureStarted(): HubServiceLike {

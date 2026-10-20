@@ -154,3 +154,32 @@ test('the default service sends v0 then v1 headers to a real channel server', as
     server.stop(true)
   }
 })
+
+test('a refused hub-bound token is reported, not retried as v0', async () => {
+  const versions: (string | null)[] = []
+  const server = Bun.serve({
+    port: 0,
+    fetch(request) {
+      versions.push(request.headers.get('v'))
+      return new Response('invalid signature', { status: 401 })
+    },
+    websocket: { message() {} },
+  })
+  const address = `ws://localhost:${server.port}`
+  const client = new HubClient({
+    address,
+    keyStore: new MemoryKeyStore(keys.service.keyFile),
+    hubKeys: new MemoryHubKeyStore({ [address]: keys.hub.publicKey }),
+  })
+  try {
+    const error = await client.send('hub/info').then(() => undefined, error => error)
+    expect(error).toMatchObject({ name: 'HubError', kind: 'auth', path: 'hub/info' })
+    expect(error.hint).toContain('hubkey forget')
+    const iterator = client.values('hub/devices')[Symbol.asyncIterator]()
+    expect(await iterator.next().then(() => undefined, error => error.kind)).toBe('auth')
+    expect(versions.every(version => version === '1')).toBe(true)
+  } finally {
+    client.stop()
+    server.stop(true)
+  }
+})
