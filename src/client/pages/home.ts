@@ -78,6 +78,9 @@
  * - Requests -> `security/pending-list.ts`.
  * - Permissions -> `security/permission-groups.ts`.
  * - Lockdown -> `security/lockdown.ts`.
+ * - Mode -> `security/mode.ts` (default-allow / default-deny, hub-bound tokens).
+ * - Grants -> `security/grants.ts`.
+ * - Groups -> `security/groups.ts` (device and person groups).
  * - Launcher -> `launcher.ts`.
  * - Files -> file browser page from reference app.
  * - Install S3 -> `help/install-s3.ts`.
@@ -241,8 +244,16 @@ function securityPageLinks() {
       ],
       { spacing: 2 },
     ),
+    HStack(
+      [
+        RouteLink('Mode', 'security/mode'),
+        RouteLink('Grants', 'security/grants'),
+        RouteLink('Groups', 'security/groups'),
+      ],
+      { spacing: 2 },
+    ),
     Text(
-      'Security pages cover pending requests, permission groups, connected users, and lockdown trust controls.',
+      'Security pages cover pending requests, permission groups, connected users, lockdown, the security mode, grants and device groups.',
     ).foregroundColor('secondary'),
   ]
 }

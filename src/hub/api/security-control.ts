@@ -1,5 +1,12 @@
 import type { HubRuntimeClient } from '../runtime'
+import { normalizeHubInfo, type HubInfo } from '../client'
 import type {
+  HubGrant,
+  HubGrantObject,
+  HubGrantSubject,
+  HubGroupMember,
+  HubSecurityMode,
+  HubSecurityModeUpdate,
   SecurityGroup,
   SecurityGroupUpdate,
   SecurityGroupUsers,
@@ -62,8 +69,9 @@ export class SecurityControl {
     await this.client.send('hub/call/update', update)
   }
 
-  async createGroup(name: string): Promise<void> {
-    await this.client.send('hub/group/create', name)
+  /** A person group stands for one person's devices and keys. */
+  async createGroup(name: string, options: { person?: boolean } = {}): Promise<void> {
+    await this.client.send('hub/group/create', options.person ? { name, person: true } : name)
   }
 
   async renameGroup(group: string, name: string): Promise<void> {
@@ -92,6 +100,15 @@ export class SecurityControl {
 
   async updateGroupUsers(update: SecurityGroupUsersUpdate): Promise<void> {
     await this.client.send('hub/group/update/users', update)
+  }
+
+  /** Adds `key:<SPKI>` or `device:<id>` members; a member can be in any number of groups. */
+  async addGroupMembers(group: string, members: HubGroupMember[]): Promise<void> {
+    await this.addGroupUsers(group, members.map(formatGroupMember))
+  }
+
+  async removeGroupMembers(group: string, members: HubGroupMember[]): Promise<void> {
+    await this.removeGroupUsers(group, members.map(formatGroupMember))
   }
 
   async addGroupUsers(group: string, users: string[]): Promise<void> {
@@ -124,6 +141,38 @@ export class SecurityControl {
 
   watchGroupNames(): AsyncIterable<SecurityPermissionNames> {
     return mapValues(this.client.values('hub/group/names'), normalizePermissionNames)
+  }
+
+  async info(): Promise<HubInfo | undefined> {
+    return normalizeHubInfo(await this.client.send('hub/info'))
+  }
+
+  securityMode(): Promise<HubSecurityMode> {
+    return firstValue(this.watchSecurityMode())
+  }
+
+  watchSecurityMode(): AsyncIterable<HubSecurityMode> {
+    return mapValues(this.client.values('hub/security/mode'), normalizeSecurityMode)
+  }
+
+  async setSecurityMode(update: HubSecurityModeUpdate): Promise<void> {
+    await this.client.send('hub/security/mode/set', update)
+  }
+
+  grants(): Promise<HubGrant[]> {
+    return firstValue(this.watchGrants())
+  }
+
+  watchGrants(): AsyncIterable<HubGrant[]> {
+    return mapValues(this.client.values('hub/grants'), normalizeGrants)
+  }
+
+  async addGrant(subject: HubGrantSubject, object: HubGrantObject): Promise<HubGrant | undefined> {
+    return normalizeGrant(await this.client.send('hub/grant/add', { subject, object }))
+  }
+
+  async removeGrant(id: string): Promise<void> {
+    await this.client.send('hub/grant/remove', { id })
   }
 
   whitelistStatus(): Promise<SecurityWhitelistStatus> {
@@ -212,6 +261,96 @@ export function normalizeWhitelistStatus(value: unknown): SecurityWhitelistStatu
   }
 }
 
+export function normalizeSecurityMode(value: unknown): HubSecurityMode {
+  const source = asRecord(value)
+  return {
+    mode: source?.mode === 'default-deny' ? 'default-deny' : 'default-allow',
+    requireV1: source?.requireV1 === true,
+  }
+}
+
+export function normalizeGrants(value: unknown): HubGrant[] {
+  const source = asRecord(value)
+  const items = Array.isArray(value) ? value : Array.isArray(source?.grants) ? source.grants : []
+  return items.map(normalizeGrant).filter((grant): grant is HubGrant => Boolean(grant))
+}
+
+export function normalizeGrant(value: unknown): HubGrant | undefined {
+  const item = asRecord(value)
+  const id = optionalString(item?.id)
+  const subject = normalizeGrantSubject(item?.subject)
+  const object = normalizeGrantObject(item?.object)
+  if (!item || !id || !subject || !object) return undefined
+  return { id, subject, object, by: optionalString(item.by), at: optionalString(item.at) }
+}
+
+function normalizeGrantSubject(value: unknown): HubGrantSubject | undefined {
+  const item = asRecord(value)
+  if (!item) return undefined
+  if (typeof item.key === 'string') return { key: item.key }
+  if (typeof item.device === 'string') return { device: item.device }
+  if (typeof item.group === 'string') return { group: item.group }
+  if (item.everyone === true) return { everyone: true }
+  return undefined
+}
+
+function normalizeGrantObject(value: unknown): HubGrantObject | undefined {
+  const item = asRecord(value)
+  if (!item) return undefined
+  if (typeof item.path === 'string') return { path: item.path }
+  if (typeof item.prefix === 'string') return { prefix: item.prefix }
+  if (typeof item.share === 'string') return { share: item.share }
+  return undefined
+}
+
+/** `key:<SPKI>`, `device:<id>`, `group:<id>` or `everyone`. */
+export function parseGrantSubject(text: string): HubGrantSubject {
+  if (text === 'everyone') return { everyone: true }
+  const [kind, value] = splitKind(text)
+  if (kind === 'key' && value) return { key: value }
+  if (kind === 'device' && value) return { device: value }
+  if (kind === 'group' && value) return { group: value }
+  throw new Error(`Grant subject must be key:<SPKI>, device:<id>, group:<id> or everyone, got ${text}`)
+}
+
+/** `path:<path>`, `prefix:<prefix>` or `share:<resource id>`. */
+export function parseGrantObject(text: string): HubGrantObject {
+  const [kind, value] = splitKind(text)
+  if (kind === 'path' && value) return { path: value }
+  if (kind === 'prefix' && value) return { prefix: value }
+  if (kind === 'share' && value) return { share: value }
+  throw new Error(`Grant object must be path:<path>, prefix:<prefix> or share:<id>, got ${text}`)
+}
+
+export function formatGrantSubject(subject: HubGrantSubject): string {
+  if ('everyone' in subject) return 'everyone'
+  if ('key' in subject) return `key:${subject.key}`
+  if ('device' in subject) return `device:${subject.device}`
+  return `group:${subject.group}`
+}
+
+export function formatGrantObject(object: HubGrantObject): string {
+  if ('path' in object) return `path:${object.path}`
+  if ('prefix' in object) return `prefix:${object.prefix}`
+  return `share:${object.share}`
+}
+
+/** Group member strings are `key:<SPKI>` or `device:<id>`; plain SPKI strings in older stores mean `key:`. */
+export function parseGroupMember(text: string): HubGroupMember {
+  if (text.startsWith('device:')) return { kind: 'device', id: text.slice('device:'.length) }
+  if (text.startsWith('key:')) return { kind: 'key', key: text.slice('key:'.length) }
+  return { kind: 'key', key: text }
+}
+
+export function formatGroupMember(member: HubGroupMember): string {
+  return member.kind === 'device' ? `device:${member.id}` : `key:${member.key}`
+}
+
+function splitKind(text: string): [string, string] {
+  const index = text.indexOf(':')
+  return index < 0 ? [text, ''] : [text.slice(0, index), text.slice(index + 1)]
+}
+
 function normalizePendingItem(value: unknown): SecurityPendingItem | undefined {
   const item = asRecord(value)
   if (!item) return undefined
@@ -235,6 +374,7 @@ function normalizeGroup(value: unknown): SecurityGroup | undefined {
     id: optionalString(item.id) ?? name,
     name,
     permissions: uniqueStrings(item.permissions),
+    ...(item.person === true ? { person: true } : {}),
     raw: value,
   }
 }

@@ -77,3 +77,33 @@ test('device commands send the device API payloads', async () => {
     { path: 'hub/device/revoke', body: { id: 'd1', keepServices: ['K1', 'K2'] } },
   ])
 })
+
+test('security commands send mode, grant and group payloads', async () => {
+  const { client, calls } = recordingClient()
+  const env = {
+    connections: new MemoryConnectionStore(),
+    keyStore: new MemoryKeyStore(),
+    hubKeys: new MemoryHubKeyStore(),
+    log: () => {},
+    createClient: () => client,
+  }
+  await runExCommand(['security', 'mode', 'set', 'default-deny'], env)
+  await runExCommand(['security', 'require-v1', 'on'], env)
+  await expect(runExCommand(['security', 'mode', 'set', 'open'], env)).rejects.toThrow('default-deny')
+  await runExCommand(['grant', 'add', 'device:d1', 'prefix:s3/'], env)
+  await runExCommand(['grant', 'add', 'everyone', 'path:hub/info'], env)
+  await runExCommand(['grant', 'remove', 'g1'], env)
+  await runExCommand(['group', 'create', 'Dmitry', '--person'], env)
+  await runExCommand(['group', 'add', 'device', 'family', 'd1'], env)
+  await runExCommand(['group', 'remove', 'device', 'family', 'd1'], env)
+  expect(calls).toEqual([
+    { path: 'hub/security/mode/set', body: { mode: 'default-deny' } },
+    { path: 'hub/security/mode/set', body: { requireV1: true } },
+    { path: 'hub/grant/add', body: { subject: { device: 'd1' }, object: { prefix: 's3/' } } },
+    { path: 'hub/grant/add', body: { subject: { everyone: true }, object: { path: 'hub/info' } } },
+    { path: 'hub/grant/remove', body: { id: 'g1' } },
+    { path: 'hub/group/create', body: { name: 'Dmitry', person: true } },
+    { path: 'hub/group/update/users', body: { group: 'family', add: ['device:d1'] } },
+    { path: 'hub/group/update/users', body: { group: 'family', remove: ['device:d1'] } },
+  ])
+})

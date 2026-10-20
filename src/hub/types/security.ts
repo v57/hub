@@ -16,6 +16,8 @@ export interface SecurityGroup {
   id: string
   name: string
   permissions: string[]
+  /** A group that stands for a person (their devices and keys). */
+  person?: boolean
   raw?: unknown
 }
 
@@ -47,3 +49,29 @@ export interface SecurityWhitelistUpdate {
   remove?: string[]
   allowsCurrent?: boolean
 }
+
+export type HubSecurityModeName = 'default-allow' | 'default-deny'
+
+export interface HubSecurityMode {
+  mode: HubSecurityModeName
+  requireV1: boolean
+}
+
+export interface HubSecurityModeUpdate {
+  mode?: HubSecurityModeName
+  requireV1?: boolean
+}
+
+export type HubGrantSubject = { key: string } | { device: string } | { group: string } | { everyone: true }
+export type HubGrantObject = { path: string } | { prefix: string } | { share: string }
+
+export interface HubGrant {
+  id: string
+  subject: HubGrantSubject
+  object: HubGrantObject
+  by?: string
+  at?: string
+}
+
+/** A group member string: `key:<SPKI>` or `device:<id>`; plain SPKI strings mean `key:`. */
+export type HubGroupMember = { kind: 'key'; key: string } | { kind: 'device'; id: string }

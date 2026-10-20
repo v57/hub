@@ -12,6 +12,8 @@ import {
   StorageControl,
   createDefaultKeyStore,
   type ConnectionStore,
+  parseGrantObject,
+  parseGrantSubject,
   type HubContext,
   type HubKeyStore,
   type HubRuntimeClient,
@@ -30,6 +32,8 @@ export interface ExCommandOptions {
   device: boolean
   /** Service keys to keep on `device revoke`. */
   keep: string[]
+  /** `group create --person`. */
+  person: boolean
   context?: HubContext
   pid?: number
 }
@@ -132,12 +136,21 @@ const helpEntries: HelpEntry[] = [
   { id: 'call:allowed', group: 'security', usage: 'call allowed <key>', endpoint: 'hub/call/allowed', description: 'Print allowed call paths.' },
   { id: 'groups', group: 'security', usage: 'groups', endpoint: 'hub/group/list', description: 'Print permission groups.' },
   { id: 'group:names', group: 'security', usage: 'group names', endpoint: 'hub/group/names', description: 'Print permission names.' },
-  { id: 'group:create', group: 'security', usage: 'group create <name>', endpoint: 'hub/group/create', description: 'Create permission group.' },
+  { id: 'group:create', group: 'security', usage: 'group create <name> [--person]', endpoint: 'hub/group/create', description: 'Create group; --person makes it a person group.' },
   { id: 'group:rename', group: 'security', usage: 'group rename <old> <new>', endpoint: 'hub/group/rename', description: 'Rename permission group.' },
   { id: 'group:remove', group: 'security', usage: 'group remove <name>', endpoint: 'hub/group/remove', description: 'Remove permission group.' },
   { id: 'group:set', group: 'security', usage: 'group set <name> <path...>', endpoint: 'hub/group/update', description: 'Set group permissions.' },
   { id: 'group:add:user', group: 'security', usage: 'group add user <group> <key>', endpoint: 'hub/group/update/users', description: 'Add group user.' },
   { id: 'group:remove:user', group: 'security', usage: 'group remove user <group> <key>', endpoint: 'hub/group/update/users', description: 'Remove group user.' },
+  { id: 'group:members', group: 'security', usage: 'group members', endpoint: 'hub/group/users', description: 'Print group members (key:<SPKI> and device:<id>).' },
+  { id: 'group:add:device', group: 'security', usage: 'group add device <group> <device-id>', endpoint: 'hub/group/update/users', description: 'Add a device to a group; a device can be in several groups.' },
+  { id: 'group:remove:device', group: 'security', usage: 'group remove device <group> <device-id>', endpoint: 'hub/group/update/users', description: 'Remove a device from a group.' },
+  { id: 'security:mode', group: 'security', usage: 'security mode', endpoint: 'hub/security/mode', description: 'Print the security mode and whether hub-bound tokens are required.' },
+  { id: 'security:mode:set', group: 'security', usage: 'security mode set <default-allow|default-deny>', endpoint: 'hub/security/mode/set', description: 'Switch the security mode.' },
+  { id: 'security:require-v1', group: 'security', usage: 'security require-v1 <on|off>', endpoint: 'hub/security/mode/set', description: 'Require hub-bound (v1) tokens.' },
+  { id: 'grants', group: 'security', usage: 'grants', endpoint: 'hub/grants', description: 'Print grants.' },
+  { id: 'grant:add', group: 'security', usage: 'grant add <key:..|device:..|group:..|everyone> <path:..|prefix:..|share:..>', endpoint: 'hub/grant/add', description: 'Add grant.' },
+  { id: 'grant:remove', group: 'security', usage: 'grant remove <id>', endpoint: 'hub/grant/remove', description: 'Remove grant.' },
   { id: 'whitelist', group: 'security', usage: 'whitelist', endpoint: 'hub/whitelist/status', description: 'Print whitelist status.' },
   { id: 'whitelist:enable', group: 'security', usage: 'whitelist enable', endpoint: 'hub/whitelist', description: 'Enable whitelist.' },
   { id: 'whitelist:disable', group: 'security', usage: 'whitelist disable', endpoint: 'hub/whitelist', description: 'Disable whitelist.' },
@@ -229,7 +242,27 @@ const commandRunners: Record<string, CommandRunner> = {
   'call:allowed': async (context, args) => context.log(await (await context.security()).callAllowed(expectArg(args, 0, 'key'))),
   groups: async context => context.log(await (await context.security()).groupList()),
   'group:names': async context => context.log(await (await context.security()).groupNames()),
-  'group:create': async (context, args) => ok(context, (await context.security()).createGroup(expectArg(args, 0, 'name'))),
+  'group:create': async (context, args) => ok(context, (await context.security()).createGroup(expectRest(args, 0, 'name').join(' '), { person: context.options.person })),
+  'group:members': async context => context.log(await (await context.security()).groupUsers()),
+  'group:add:device': async (context, args) => ok(context, (await context.security()).addGroupMembers(expectArg(args, 0, 'group'), [{ kind: 'device', id: expectArg(args, 1, 'device-id') }])),
+  'group:remove:device': async (context, args) => ok(context, (await context.security()).removeGroupMembers(expectArg(args, 0, 'group'), [{ kind: 'device', id: expectArg(args, 1, 'device-id') }])),
+  'security:mode': async context => context.log(await (await context.security()).securityMode()),
+  'security:mode:set': async (context, args) => {
+    const mode = expectArg(args, 0, 'mode')
+    if (mode !== 'default-allow' && mode !== 'default-deny') throw new Error('mode must be default-allow or default-deny')
+    await ok(context, (await context.security()).setSecurityMode({ mode }))
+  },
+  'security:require-v1': async (context, args) => {
+    const value = expectArg(args, 0, 'on|off')
+    if (value !== 'on' && value !== 'off') throw new Error('require-v1 takes on or off')
+    await ok(context, (await context.security()).setSecurityMode({ requireV1: value === 'on' }))
+  },
+  grants: async context => context.log(await (await context.security()).grants()),
+  'grant:add': async (context, args) => context.log(await (await context.security()).addGrant(
+    parseGrantSubject(expectArg(args, 0, 'subject')),
+    parseGrantObject(expectArg(args, 1, 'object')),
+  )),
+  'grant:remove': async (context, args) => ok(context, (await context.security()).removeGrant(expectArg(args, 0, 'id'))),
   'group:rename': async (context, args) => ok(context, (await context.security()).renameGroup(expectArg(args, 0, 'old'), expectArg(args, 1, 'new'))),
   'group:remove': async (context, args) => ok(context, (await context.security()).removeGroup(expectArg(args, 0, 'name'))),
   'group:set': async (context, args) => ok(context, (await context.security()).setGroupPermissions(expectArg(args, 0, 'name'), expectRest(args, 1, 'path'))),
@@ -385,7 +418,7 @@ function createContext(options: ExCommandOptions, env: ExEnvironment): ExContext
 
 function extractOptions(argv: string[]): { words: string[]; options: ExCommandOptions } {
   const words: string[] = []
-  const options: ExCommandOptions = { json: false, yes: false, end: false, help: false, device: false, keep: [] }
+  const options: ExCommandOptions = { json: false, yes: false, end: false, help: false, device: false, keep: [], person: false }
 
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index]
@@ -397,6 +430,8 @@ function extractOptions(argv: string[]): { words: string[]; options: ExCommandOp
       options.end = true
     } else if (value === '--device') {
       options.device = true
+    } else if (value === '--person') {
+      options.person = true
     } else if (value === '--keep') {
       const key = argv[index + 1]
       if (!key) throw new Error('--keep requires value')
@@ -489,8 +524,22 @@ function route(words: string[]): { id: string; args: string[] } {
       if (second === 'revoke') return { id: 'host:revoke', args: words.slice(2) }
       if (second === 'allowed') return { id: 'host:allowed', args: words.slice(2) }
       break
+    case 'grants':
+      return { id: 'grants', args: words.slice(1) }
+    case 'grant':
+      if (second === 'add') return { id: 'grant:add', args: words.slice(2) }
+      if (second === 'remove') return { id: 'grant:remove', args: words.slice(2) }
+      break
+    case 'security':
+      if (second === 'mode' && third === 'set') return { id: 'security:mode:set', args: words.slice(3) }
+      if (second === 'mode') return { id: 'security:mode', args: words.slice(2) }
+      if (second === 'require-v1') return { id: 'security:require-v1', args: words.slice(2) }
+      break
     case 'group':
       if (second === 'names') return { id: 'group:names', args: words.slice(2) }
+      if (second === 'members') return { id: 'group:members', args: words.slice(2) }
+      if (second === 'add' && third === 'device') return { id: 'group:add:device', args: words.slice(3) }
+      if (second === 'remove' && third === 'device') return { id: 'group:remove:device', args: words.slice(3) }
       if (second === 'create') return { id: 'group:create', args: words.slice(2) }
       if (second === 'rename') return { id: 'group:rename', args: words.slice(2) }
       if (second === 'remove' && third === 'user') return { id: 'group:remove:user', args: words.slice(3) }

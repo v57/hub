@@ -44,6 +44,15 @@ export {
 } from './api/device-control'
 export {
   SecurityControl,
+  formatGrantObject,
+  formatGrantSubject,
+  formatGroupMember,
+  normalizeGrant,
+  normalizeGrants,
+  normalizeSecurityMode,
+  parseGrantObject,
+  parseGrantSubject,
+  parseGroupMember,
   normalizeGroupList,
   normalizePendingPermissions,
   normalizePermissionNames,
@@ -187,6 +196,13 @@ export type {
   LauncherTerminalSettings,
 } from './types/launcher'
 export type {
+  HubGrant,
+  HubGrantObject,
+  HubGrantSubject,
+  HubGroupMember,
+  HubSecurityMode,
+  HubSecurityModeName,
+  HubSecurityModeUpdate,
   SecurityGroup,
   SecurityGroupUpdate,
   SecurityGroupUsers,

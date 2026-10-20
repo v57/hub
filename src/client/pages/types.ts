@@ -1,5 +1,14 @@
 import type { ViewNode } from '../terminal'
-import type { DeviceControl, HubBalancerType, HubDevice, HubDeviceData, HubPendingDevice, SecurityControl } from '../../hub'
+import type {
+  DeviceControl,
+  HubBalancerType,
+  HubDevice,
+  HubDeviceData,
+  HubGrant,
+  HubPendingDevice,
+  HubSecurityMode,
+  SecurityControl,
+} from '../../hub'
 
 export const clientRouteIds = [
   'home',
@@ -17,6 +26,9 @@ export const clientRouteIds = [
   'security/lockdown',
   'devices',
   'devices/detail',
+  'security/mode',
+  'security/grants',
+  'security/groups',
 ] as const
 
 export type ClientRouteId = typeof clientRouteIds[number]
@@ -36,6 +48,8 @@ export type ClientStorageTestStatus = 'idle' | 'ok' | 'failed'
 export type ClientLauncherStatus = 'not-installed' | 'failed' | 'installed' | 'offline' | 'stopping' | 'running'
 export type ClientCreateAppMode = 'Shell' | 'Bun'
 export type ClientStoreFilter = 'All' | 'App' | 'Api' | 'Server'
+export type ClientGrantSubjectKind = 'Everyone' | 'Group' | 'Device' | 'Key'
+export type ClientGrantObjectKind = 'Path' | 'Prefix' | 'Share'
 
 export interface ClientServiceRow {
   id?: string
@@ -105,6 +119,7 @@ export interface ClientPermissionGroup {
   id?: string
   name: string
   permissions: string[]
+  person?: boolean
 }
 
 export interface ClientHubUser {
@@ -211,6 +226,19 @@ export interface ClientPageState {
   deviceNameDraft?: string
   deviceRevokeArmed?: boolean
   deviceKeepServices?: string[]
+  securityMode?: HubSecurityMode
+  grants?: HubGrant[]
+  selectedGrantId?: string
+  grantSubjectKind?: ClientGrantSubjectKind
+  grantSubjectValue?: string
+  grantObjectKind?: ClientGrantObjectKind
+  grantObjectValue?: string
+  /** `hub/group/users`: group id -> `key:<SPKI>` / `device:<id>` members. */
+  groupMembers?: Record<string, string[]>
+  selectedGroupId?: string
+  groupPersonDraft?: boolean
+  groupKeyDraft?: string
+  groupDeviceDraft?: string
 }
 
 export interface ClientPageContext {
@@ -314,5 +342,17 @@ export function createClientPageState(state: Partial<ClientPageState> = {}): Cli
     deviceNameDraft: state.deviceNameDraft ?? '',
     deviceRevokeArmed: state.deviceRevokeArmed ?? false,
     deviceKeepServices: state.deviceKeepServices ?? [],
+    securityMode: state.securityMode,
+    grants: state.grants ?? [],
+    selectedGrantId: state.selectedGrantId,
+    grantSubjectKind: state.grantSubjectKind ?? 'Group',
+    grantSubjectValue: state.grantSubjectValue ?? '',
+    grantObjectKind: state.grantObjectKind ?? 'Path',
+    grantObjectValue: state.grantObjectValue ?? '',
+    groupMembers: state.groupMembers ?? {},
+    selectedGroupId: state.selectedGroupId,
+    groupPersonDraft: state.groupPersonDraft ?? false,
+    groupKeyDraft: state.groupKeyDraft ?? '',
+    groupDeviceDraft: state.groupDeviceDraft,
   }
 }

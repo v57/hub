@@ -9,7 +9,10 @@ import { editAppPage } from './launcher/edit-app'
 import { launcherStorePage } from './launcher/store'
 import { launcherPage } from './launcher'
 import { servicesPage } from './services'
+import { grantsPage } from './security/grants'
+import { groupsPage } from './security/groups'
 import { lockdownPage } from './security/lockdown'
+import { securityModePage } from './security/mode'
 import { pendingListPage } from './security/pending-list'
 import { permissionGroupsPage } from './security/permission-groups'
 import { userConnectionsPage } from './security/user-connections'
@@ -31,6 +34,9 @@ export const clientPages: ClientPage[] = [
   lockdownPage,
   devicesPage,
   deviceDetailPage,
+  securityModePage,
+  grantsPage,
+  groupsPage,
 ]
 
 const pagesByRoute = new Map<ClientRouteId, ClientPage>(clientPages.map(page => [page.route, page]))
