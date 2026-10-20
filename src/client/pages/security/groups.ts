@@ -19,6 +19,10 @@
  *   can be in any number of groups.
  * - Create Group: name, "Person" toggle, "Create".
  *
+ * Data/state needed:
+ * - `hub/groups` (owners first, with person flag and `key:`/`device:` members);
+ *   hubs without it fall back to `hub/group/list` plus `hub/group/users`.
+ *
  * Actions (owners):
  * - Create: `hub/group/create` with the name, or `{ name, person: true }`.
  * - Add/remove member: `hub/group/update/users { group, add | remove }`.
@@ -30,7 +34,8 @@ import { formatGroupMember, parseGroupMember, type HubDevice } from '../../../hu
 import { Button, HStack, Picker, StatusBadge, Table, Text, TextField, Toggle, type ViewNode } from '../../terminal'
 import { errorMessage, runAction, watchInto } from '../live'
 import { Card, PageShell, RouteLink, Section, stateBinding } from '../shared'
-import type { ClientPage, ClientPageState, ClientPermissionGroup } from '../types'
+import type { TaskContext } from '../../terminal'
+import type { ClientLive, ClientPage, ClientPageState, ClientPermissionGroup } from '../types'
 import { deviceLabel, memberLabel } from './labels'
 
 type GroupRow = ClientPermissionGroup & { id: string; kindText: string; membersText: string }
@@ -78,20 +83,35 @@ export const groupsPage: ClientPage = {
       const live = state.live
       if (!live) return
       await Promise.all([
-        watchInto(state, task, live.security.watchGroupList(), groups => {
-          state.permissionGroups = groups
-        }, error => {
-          state.securityNotice = `Failed to load groups: ${errorMessage(error)}`
-        }),
-        watchInto(state, task, live.security.watchGroupUsers(), members => {
-          state.groupMembers = members
-        }),
+        watchGroupsInto(state, task, live),
         watchInto(state, task, live.devices.watchDevices(), devices => {
           state.devices = devices
         }),
       ])
     })
   },
+}
+
+/** Streams groups and members into state from `hub/groups`, or from the older two streams on hubs without it. */
+export async function watchGroupsInto(state: ClientPageState, task: TaskContext, live: ClientLive): Promise<void> {
+  let failure: unknown
+  await watchInto(state, task, live.security.watchGroups(), groups => {
+    state.permissionGroups = groups.map(group => ({ id: group.id, name: group.name, permissions: group.paths, person: group.person }))
+    state.groupMembers = Object.fromEntries(groups.map(group => [group.id, group.members]))
+  }, error => {
+    failure = error
+  })
+  if (task.signal.aborted || failure === undefined) return
+  await Promise.all([
+    watchInto(state, task, live.security.watchGroupList(), groups => {
+      state.permissionGroups = groups
+    }, error => {
+      state.securityNotice = `Failed to load groups: ${errorMessage(error)}`
+    }),
+    watchInto(state, task, live.security.watchGroupUsers(), members => {
+      state.groupMembers = members
+    }),
+  ])
 }
 
 function groupRows(state: ClientPageState): GroupRow[] {

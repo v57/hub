@@ -8,7 +8,8 @@ export class MockHubClient implements HubRuntimeClient {
   sends: HubCall[] = []
   streams: HubCall[] = []
   sendResults = new Map<string, unknown>()
-  streamResults = new Map<string, unknown[]>()
+  /** Values per stream path; an Error fails the stream, as a missing API does. */
+  streamResults = new Map<string, unknown[] | Error>()
 
   async send<T = unknown>(path: string, body?: unknown): Promise<T> {
     this.sends.push({ path, body })
@@ -19,7 +20,9 @@ export class MockHubClient implements HubRuntimeClient {
 
   async *values<T = unknown>(path: string, body?: unknown): AsyncIterable<T> {
     this.streams.push({ path, body })
-    for (const value of this.streamResults.get(path) ?? []) yield value as T
+    const results = this.streamResults.get(path) ?? []
+    if (results instanceof Error) throw results
+    for (const value of results) yield value as T
   }
 
   stop(): void {}

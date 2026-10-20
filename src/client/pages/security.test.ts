@@ -10,12 +10,11 @@ function liveHub(mode = 'default-allow') {
   const client = new MockHubClient()
   client.streamResults.set('hub/security/mode', [{ mode, requireV1: false }])
   client.streamResults.set('hub/devices', [[macStudio]])
-  client.streamResults.set('hub/group/list', [[
-    { id: 'owners', name: 'owners' },
-    { id: 'family', name: 'Family' },
-    { id: 'dmitry', name: 'Dmitry', person: true },
+  client.streamResults.set('hub/groups', [[
+    { id: 'owners', person: false, members: ['key:MCowOWNERKEY00000'], paths: [] },
+    { id: 'family', name: 'Family', person: false, members: [`device:${macStudio.id}`, 'key:MCowFAMILYKEY0000'], paths: [] },
+    { id: 'dmitry', name: 'Dmitry', person: true, members: [`device:${macStudio.id}`], paths: [] },
   ]])
-  client.streamResults.set('hub/group/users', [{ family: [`device:${macStudio.id}`, 'key:MCowFAMILYKEY0000'], dmitry: [`device:${macStudio.id}`] }])
   client.streamResults.set('hub/grants', [[
     { id: 'g1', subject: { group: 'family' }, object: { prefix: 's3/' }, by: 'OWNERKEY12345678', at: '2026-10-20T10:00:00Z' },
   ]])
@@ -79,7 +78,7 @@ test('groups page shows device and person groups and edits members', async () =>
   expect(frame).toContain('Hub Client / Groups')
   expect(frame).toContain('Person')
   expect(frame).toContain('Device Mac Studio, Key …YKEY0000')
-  expect(frame).toContain('Mac Studio: Dmitry, Family')
+  expect(frame).toContain('Mac Studio: Family, Dmitry')
   expect(frame).toContain('iPhone: no groups')
   expect(frame).toContain('Device: iPhone')
 
@@ -94,6 +93,19 @@ test('groups page shows device and person groups and edits members', async () =>
     { path: 'hub/group/update/users', body: { group: 'family', remove: [`device:${macStudio.id}`] } },
     { path: 'hub/group/create', body: { name: 'Anna', person: true } },
   ])
+  view.terminal.stop()
+})
+
+test('groups page falls back to hub/group/list and hub/group/users on hubs without hub/groups', async () => {
+  const { client, live } = liveHub()
+  client.streamResults.set('hub/groups', new Error('api not found'))
+  client.streamResults.set('hub/group/list', [{ Family: ['s3/read'] }])
+  client.streamResults.set('hub/group/users', [{ Family: [`device:${macStudio.id}`, 'MCowPLAINKEY00000'] }])
+  const view = render({ live }, ['security/groups'])
+  await flush()
+  const frame = plain(view.terminal)
+  expect(frame).toContain('Key …KEY00000, Device Mac Studio')
+  expect(frame).toContain('Mac Studio: Family')
   view.terminal.stop()
 })
 

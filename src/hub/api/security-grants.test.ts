@@ -72,3 +72,16 @@ test('grant and member strings round-trip', () => {
   expect(normalizeSecurityMode(undefined)).toEqual({ mode: 'default-allow', requireV1: false })
   expect(normalizeGrants({ grants: [] })).toEqual([])
 })
+
+test('hub/groups lists groups with person flag, members and paths', async () => {
+  const client = new MockHubClient()
+  client.streamResults.set('hub/groups', [[
+    { id: 'owners', person: false, members: ['key:K', 'device:d1'], paths: [] },
+    { id: 'Family', person: true, members: ['device:d2'], paths: ['s3/read'] },
+    { person: true },
+  ]])
+  expect(await new SecurityControl(client).groups()).toEqual([
+    { id: 'owners', name: 'owners', person: false, members: ['key:K', 'device:d1'], paths: [] },
+    { id: 'Family', name: 'Family', person: true, members: ['device:d2'], paths: ['s3/read'] },
+  ])
+})

@@ -73,5 +73,15 @@ export interface HubGrant {
   at?: string
 }
 
+/** A group from `hub/groups`, with its members and the paths granted to it. */
+export interface SecurityGroupInfo {
+  id: string
+  name: string
+  person: boolean
+  /** `key:<SPKI>` or `device:<id>`. */
+  members: string[]
+  paths: string[]
+}
+
 /** A group member string: `key:<SPKI>` or `device:<id>`; plain SPKI strings mean `key:`. */
 export type HubGroupMember = { kind: 'key'; key: string } | { kind: 'device'; id: string }

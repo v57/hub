@@ -24,13 +24,14 @@
  * - "Remove" sends `hub/grant/remove { id }`.
  *
  * Data/state needed:
- * - `hub/grants` stream; `hub/devices` and `hub/group/list` to show names.
+ * - `hub/grants` stream; `hub/devices` and `hub/groups` to show names.
  */
 import type { HubGrant, HubGrantObject, HubGrantSubject } from '../../../hub'
 import { Button, HStack, Picker, StatusBadge, Table, Text, TextField } from '../../terminal'
 import { errorMessage, runAction, watchInto } from '../live'
 import { Card, PageShell, Section, stateBinding } from '../shared'
 import type { ClientGrantObjectKind, ClientGrantSubjectKind, ClientPage, ClientPageState } from '../types'
+import { watchGroupsInto } from './groups'
 import { objectLabel, subjectLabel } from './labels'
 
 const subjectKinds: ClientGrantSubjectKind[] = ['Everyone', 'Group', 'Device', 'Key']
@@ -99,9 +100,7 @@ export const grantsPage: ClientPage = {
         watchInto(state, task, live.devices.watchDevices(), devices => {
           state.devices = devices
         }),
-        watchInto(state, task, live.security.watchGroupList(), groups => {
-          state.permissionGroups = groups
-        }),
+        watchGroupsInto(state, task, live),
       ])
     })
   },

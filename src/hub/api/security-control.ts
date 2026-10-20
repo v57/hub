@@ -8,6 +8,7 @@ import type {
   HubSecurityMode,
   HubSecurityModeUpdate,
   SecurityGroup,
+  SecurityGroupInfo,
   SecurityGroupUpdate,
   SecurityGroupUsers,
   SecurityGroupUsersUpdate,
@@ -125,6 +126,15 @@ export class SecurityControl {
 
   watchGroupList(): AsyncIterable<SecurityGroup[]> {
     return mapValues(this.client.values('hub/group/list'), normalizeGroupList)
+  }
+
+  /** Groups with their members, person flag and paths (`hub/groups`, owners first). Hubs before phase 5 lack it. */
+  groups(): Promise<SecurityGroupInfo[]> {
+    return firstValue(this.watchGroups())
+  }
+
+  watchGroups(): AsyncIterable<SecurityGroupInfo[]> {
+    return mapValues(this.client.values('hub/groups'), normalizeGroupInfos)
   }
 
   groupUsers(): Promise<SecurityGroupUsers> {
@@ -259,6 +269,23 @@ export function normalizeWhitelistStatus(value: unknown): SecurityWhitelistStatu
     users: stringArray(source?.users ?? source?.whitelist),
     raw: value,
   }
+}
+
+export function normalizeGroupInfos(value: unknown): SecurityGroupInfo[] {
+  const source = asRecord(value)
+  const items = Array.isArray(value) ? value : Array.isArray(source?.groups) ? source.groups : []
+  return items.flatMap((item): SecurityGroupInfo[] => {
+    const record = asRecord(item)
+    const id = optionalString(record?.id)
+    if (!record || !id) return []
+    return [{
+      id,
+      name: optionalString(record.name) ?? id,
+      person: record.person === true,
+      members: stringArray(record.members),
+      paths: stringArray(record.paths),
+    }]
+  })
 }
 
 export function normalizeSecurityMode(value: unknown): HubSecurityMode {
