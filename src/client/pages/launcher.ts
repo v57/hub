@@ -67,8 +67,8 @@
  *   - "Not running" when no process memory.
  * - Shows relative started time when processes exist and `started` exists.
  * - Shows instance stepper when explicitly expanded or app instances > 1.
- * - App named "Hub Lite" shows "Upgrade to Pro", sending local public key to
- *   `launcher/pro`.
+ * - Shows hub-server's pairing code when `launcher/info` carries one (only for
+ *   the launcher's own key; `hub pair` prints it with the hub address).
  *
  * App row context menu:
  * - Active app:
@@ -97,7 +97,7 @@
  * - `launcher/status`: app runtime status map with processes, started time,
  *   updating/checking flags.
  * - Hub connection state and hasLauncher flag.
- * - Local public key for Pro upgrade.
+ * - `pairingCode` from `launcher/info`, while hub-server waits for its first owner.
  *
  * Web port notes:
  * - Use list/table with app status, process metrics, started age, update badge,
@@ -108,7 +108,7 @@
  * Terminal port notes:
  * - Render launcher status plus app table.
  * - Commands: create, store, update-all, check-updates, start, stop, restart,
- *   uninstall, edit, cluster <app> <count>, pro.
+ *   uninstall, edit, cluster <app> <count>, pair.
  * - Keep destructive uninstall behind confirmation.
  */
 import { Button, HStack, StatusBadge, Table, Text } from '../terminal'
@@ -148,6 +148,7 @@ export const launcherPage: ClientPage = {
           RouteLink('Create', 'launcher/create-app'),
           RouteLink('Get More', 'launcher/store'),
         ], { spacing: 1 }),
+        ...(state.launcherPairingCode ? [Text(`Pairing code ${state.launcherPairingCode}: enter it with this hub's address in the Hub app to become its owner.`, { wrap: true })] : []),
         ...(state.launcherNotice ? [Text(state.launcherNotice).foregroundColor('green')] : []),
       ]),
       Section('Apps', rows.length > 0 ? [
@@ -190,9 +191,6 @@ function selectedAppCard(state: ClientPageState, app: LauncherAppRow) {
           state.selectedLauncherAppId = app.id
           state.launcherNotice = `${app.name} terminal selected`
         }),
-        ...(app.name === 'Hub Lite' ? [Button('Upgrade to Pro', () => {
-          state.launcherNotice = state.publicKey ? 'Pro upgrade request prepared' : 'Public key is required for Pro upgrade'
-        }, { disabled: !state.publicKey })] : []),
       ], { spacing: 1 }),
     ],
     [

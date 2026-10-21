@@ -127,6 +127,7 @@ test('LauncherControl covers launcher streams, app actions, terminal I/O, and no
   const control = new LauncherControl(client)
 
   client.sendResults.set('launcher/update/check', true)
+  client.sendResults.set('launcher/pair/new', 'K7Q-2MX')
   client.streamResults.set('launcher/info', [{
     apps: [
       { name: 'Hub', active: true, restarts: true, updateAvailable: true, instances: 2, settings: { env: { PORT: '1997' } }, terminal: { cols: 80 } },
@@ -145,7 +146,7 @@ test('LauncherControl covers launcher streams, app actions, terminal I/O, and no
   await control.checkAllUpdates()
   await control.updateAll()
   await control.stopLauncher()
-  await control.promoteToPro('pub')
+  expect(await control.newPairingCode()).toBe('K7Q-2MX')
   await control.startApp('Hub')
   await control.stopApp('Hub')
   await control.restartApp('Hub')
@@ -160,7 +161,7 @@ test('LauncherControl covers launcher streams, app actions, terminal I/O, and no
     'launcher/update/check/all',
     'launcher/update/all',
     'launcher/stop',
-    'launcher/pro',
+    'launcher/pair/new',
     'launcher/app/start',
     'launcher/app/stop',
     'launcher/app/restart',
@@ -172,6 +173,8 @@ test('LauncherControl covers launcher streams, app actions, terminal I/O, and no
   expect(client.sends.at(-2)).toEqual({ path: 'launcher/app/settings', body: { app: 'Hub', settings: { env: { PORT: '1997' }, secrets: { TOKEN: 'x' } } }, context: undefined })
   expect(client.sends.at(-1)).toEqual({ path: 'launcher/app/cluster', body: { name: 'Hub', count: 3 }, context: undefined })
   expect(normalizeLauncherInfo({ Hub: { name: 'Hub' } })).toMatchObject({ apps: [{ name: 'Hub', instances: 1 }] })
+  expect(normalizeLauncherInfo({ apps: [], pairingCode: 'K7Q-2MX' }).pairingCode).toBe('K7Q-2MX')
+  expect(normalizeLauncherInfo({ apps: [] }).pairingCode).toBeUndefined()
   const normalizedStatus = normalizeLauncherStatus({ Hub: { name: 'Hub', processes: [{ pid: 1 }] } })
   expect(flattenLauncherProcesses(normalizedStatus)).toMatchObject([{ app: 'Hub', pid: 1 }])
 })

@@ -48,6 +48,8 @@ export interface LauncherAppInfo {
 
 export interface LauncherInfo {
   apps: LauncherAppInfo[]
+  /** hub-server's pairing code (`K7Q-2MX`); the launcher sends it to its own key only */
+  pairingCode?: string
   raw?: unknown
 }
 

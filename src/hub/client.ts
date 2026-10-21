@@ -133,7 +133,7 @@ export class HubClient {
       this.info = info
       if (!(await this.hubKeys.get(this.address))) await this.hubKeys.pin(this.address, info.key)
     } catch {
-      // Hubs without `hub/info` (hub-lite, older hub-pro) keep v0.
+      // Hubs without `hub/info` (retired hub-lite, hub-pro before the device layer) keep v0.
     }
   }
 

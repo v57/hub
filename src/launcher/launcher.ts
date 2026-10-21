@@ -20,6 +20,7 @@ const HELP_TEXT = [
   "  uninstall   Remove the launcher when it is stopped",
   "  backup      Manage launcher backups",
   "  client      Start the terminal client",
+  "  pair        Show the pairing code that makes the Hub app this hub's owner",
   "  launcher    Export or import launcher configuration",
   "  autostart   Manage login or startup launch",
   "",

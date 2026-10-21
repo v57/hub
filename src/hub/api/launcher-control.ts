@@ -49,8 +49,9 @@ export class LauncherControl {
     await this.client.send('launcher/stop')
   }
 
-  async promoteToPro(publicKey: string): Promise<void> {
-    await this.client.send('launcher/pro', publicKey)
+  /** Replaces hub-server's pairing code; the launcher accepts it from its own key only */
+  newPairingCode(): Promise<string> {
+    return this.client.send<string>('launcher/pair/new')
   }
 
   async startApp(app: string): Promise<void> {
@@ -103,7 +104,8 @@ export function flattenLauncherProcesses(status: LauncherStatus): LauncherProces
 export function normalizeLauncherInfo(value: unknown): LauncherInfo {
   const item = asRecord(value)
   const apps = arrayValues(item?.apps ?? value).map(normalizeLauncherAppInfo).filter((app): app is LauncherAppInfo => Boolean(app))
-  return { apps, raw: value }
+  const pairingCode = optionalString(item?.pairingCode)
+  return pairingCode ? { apps, pairingCode, raw: value } : { apps, raw: value }
 }
 
 export function normalizeLauncherStatus(value: unknown): LauncherStatus {

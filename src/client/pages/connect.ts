@@ -35,10 +35,10 @@
  *   Keep hubs, services, servers, and processes online with restarts, resource
  *   monitoring, updates, imports, and multi-instance scaling.
  * - Load Balance:
- *   Split identical service APIs across available devices, with Pro controls for
+ *   Split identical service APIs across available devices, with controls for
  *   balancing strategy and active request limits.
  * - Access Control:
- *   Hub Pro supports invites, multi-hub connections, service permissions, and
+ *   hub-server supports invites, multi-hub connections, service permissions, and
  *   lockdown access for teams or remote devices.
  * - Open Source:
  *   Free, transparent, dependency-light, no ads/tracking, GitHub-based stores

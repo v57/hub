@@ -181,6 +181,8 @@ export interface ClientPageState {
   launcherCheckingUpdates?: boolean
   launcherUpdating?: boolean
   launcherApps?: ClientLauncherApp[]
+  /** hub-server's pairing code from `launcher/info` */
+  launcherPairingCode?: string
   selectedLauncherAppId?: string
   launcherNotice?: string
   createAppMode?: ClientCreateAppMode
@@ -295,6 +297,7 @@ export function createClientPageState(state: Partial<ClientPageState> = {}): Cli
     launcherCheckingUpdates: state.launcherCheckingUpdates ?? false,
     launcherUpdating: state.launcherUpdating ?? false,
     launcherApps: state.launcherApps ?? [],
+    launcherPairingCode: state.launcherPairingCode,
     selectedLauncherAppId: state.selectedLauncherAppId,
     launcherNotice: state.launcherNotice,
     createAppMode: state.createAppMode ?? 'Shell',

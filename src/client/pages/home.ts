@@ -96,9 +96,7 @@
  *   - "Updating" while updating.
  *   - "Checking for updates" while checking.
  *   - "Update" when update is available.
- * - Apps named "Hub" or "Hub Lite" show "Upgrade to Pro", sending local public
- *   key to `launcher/pro`.
- * - Card grows when instance stepper is visible or Pro upgrade button is shown.
+ * - Card grows when the instance stepper is visible.
  *
  * Launcher app card context menu:
  * - Active app:

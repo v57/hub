@@ -1,5 +1,6 @@
 import { bootstrapEnvironmentVariable, bootstrapHub } from './bootstrap'
 import { main, printHelp } from './launcher'
+import { pair } from './pair'
 import { runHubClientCommand } from '../client'
 import { BunFileConnectionStore, BunFileHubKeyStore } from '../hub'
 
@@ -9,6 +10,7 @@ type RunOptions = {
   bootstrap?: typeof bootstrapHub
   client?: typeof runHubClientCommand
   launch?: typeof main
+  pair?: typeof pair
   logger?: Pick<Console, 'log'>
 }
 
@@ -31,6 +33,11 @@ export async function run(options?: RunOptions): Promise<void> {
 
   if (args[0] === 'client') {
     await client({ args: args.slice(1), connectionStore: new BunFileConnectionStore(), hubKeys: new BunFileHubKeyStore() })
+    return
+  }
+
+  if (args[0] === 'pair') {
+    await (options?.pair ?? pair)({ args: args.slice(1), env })
     return
   }
 

@@ -297,11 +297,12 @@ test('launcher pages render lifecycle, create, edit, and store workflows', () =>
     publicKey: 'hub-public-key',
     launcherStatus: 'running' as const,
     launcherUpdateAvailable: true,
-    selectedLauncherAppId: 'Hub Lite',
+    selectedLauncherAppId: 'Hub',
+    launcherPairingCode: 'K7Q-2MX',
     launcherApps: [
       {
-        id: 'Hub Lite',
-        name: 'Hub Lite',
+        id: 'Hub',
+        name: 'Hub',
         active: true,
         restarts: true,
         updateAvailable: true,
@@ -355,9 +356,10 @@ test('launcher pages render lifecycle, create, edit, and store workflows', () =>
 
   expect(launcherFrame).toContain('Hub Client / Launcher')
   expect(launcherFrame).toContain('[Running]')
-  expect(launcherFrame).toContain('Hub Lite')
+  expect(launcherFrame).toContain('Hub')
   expect(launcherFrame).toContain('App Actions')
-  expect(launcherFrame).toContain('Upgrade to Pro')
+  expect(launcherFrame).toContain('Pairing code K7Q-2MX')
+  expect(launcherFrame).not.toContain('Upgrade to Pro')
   expect(launcherFrame).toContain('Update All')
   expect(createFrame).toContain('Hub Client / Create App')
   expect(createFrame).toContain('[Bun]')
