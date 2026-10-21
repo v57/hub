@@ -298,7 +298,6 @@ test('launcher pages render lifecycle, create, edit, and store workflows', () =>
     launcherStatus: 'running' as const,
     launcherUpdateAvailable: true,
     selectedLauncherAppId: 'Hub',
-    launcherPairingCode: 'K7Q-2MX',
     launcherApps: [
       {
         id: 'Hub',
@@ -358,7 +357,6 @@ test('launcher pages render lifecycle, create, edit, and store workflows', () =>
   expect(launcherFrame).toContain('[Running]')
   expect(launcherFrame).toContain('Hub')
   expect(launcherFrame).toContain('App Actions')
-  expect(launcherFrame).toContain('Pairing code K7Q-2MX')
   expect(launcherFrame).not.toContain('Upgrade to Pro')
   expect(launcherFrame).toContain('Update All')
   expect(createFrame).toContain('Hub Client / Create App')

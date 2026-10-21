@@ -41,11 +41,12 @@ hub update
 
 - `hub pair` - show hub-server's pairing code with this device's address and a `hub://pair?a=<address>&c=<code>` link;
   enter the address and code in the Hub app (Connect to a Hub) to become the hub's owner. The code works once, for an hour
-- `hub pair --new` - replace the code with a new one
+- `hub pair --new` - replace the code with a new one (runs hub-server's one-shot `--pair`), for a hub without an owner
+  or one whose owner devices are all lost
 - `hub pair --address <host:port>` - print another address than the LAN one (for example a DNS name)
 
-`hub pair` connects to the local hub with the launcher's own key (`~/Hub/Launcher/auth`): the launcher shows the code
-to that key only.
+The code never goes over the hub: `hub pair` reads `~/Hub/Launcher/apps/hub-server/data/pairing-code` on the hub's own
+device. To add another owner later, an owner calls `launcher/pair/new` (owners only; `bun ex launcher pair new` in this repo).
 
 ### Backups
 

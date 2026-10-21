@@ -173,8 +173,6 @@ test('LauncherControl covers launcher streams, app actions, terminal I/O, and no
   expect(client.sends.at(-2)).toEqual({ path: 'launcher/app/settings', body: { app: 'Hub', settings: { env: { PORT: '1997' }, secrets: { TOKEN: 'x' } } }, context: undefined })
   expect(client.sends.at(-1)).toEqual({ path: 'launcher/app/cluster', body: { name: 'Hub', count: 3 }, context: undefined })
   expect(normalizeLauncherInfo({ Hub: { name: 'Hub' } })).toMatchObject({ apps: [{ name: 'Hub', instances: 1 }] })
-  expect(normalizeLauncherInfo({ apps: [], pairingCode: 'K7Q-2MX' }).pairingCode).toBe('K7Q-2MX')
-  expect(normalizeLauncherInfo({ apps: [] }).pairingCode).toBeUndefined()
   const normalizedStatus = normalizeLauncherStatus({ Hub: { name: 'Hub', processes: [{ pid: 1 }] } })
   expect(flattenLauncherProcesses(normalizedStatus)).toMatchObject([{ app: 'Hub', pid: 1 }])
 })

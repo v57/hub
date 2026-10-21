@@ -67,8 +67,6 @@
  *   - "Not running" when no process memory.
  * - Shows relative started time when processes exist and `started` exists.
  * - Shows instance stepper when explicitly expanded or app instances > 1.
- * - Shows hub-server's pairing code when `launcher/info` carries one (only for
- *   the launcher's own key; `hub pair` prints it with the hub address).
  *
  * App row context menu:
  * - Active app:
@@ -97,7 +95,6 @@
  * - `launcher/status`: app runtime status map with processes, started time,
  *   updating/checking flags.
  * - Hub connection state and hasLauncher flag.
- * - `pairingCode` from `launcher/info`, while hub-server waits for its first owner.
  *
  * Web port notes:
  * - Use list/table with app status, process metrics, started age, update badge,
@@ -108,7 +105,7 @@
  * Terminal port notes:
  * - Render launcher status plus app table.
  * - Commands: create, store, update-all, check-updates, start, stop, restart,
- *   uninstall, edit, cluster <app> <count>, pair.
+ *   uninstall, edit, cluster <app> <count>.
  * - Keep destructive uninstall behind confirmation.
  */
 import { Button, HStack, StatusBadge, Table, Text } from '../terminal'
@@ -148,7 +145,6 @@ export const launcherPage: ClientPage = {
           RouteLink('Create', 'launcher/create-app'),
           RouteLink('Get More', 'launcher/store'),
         ], { spacing: 1 }),
-        ...(state.launcherPairingCode ? [Text(`Pairing code ${state.launcherPairingCode}: enter it with this hub's address in the Hub app to become its owner.`, { wrap: true })] : []),
         ...(state.launcherNotice ? [Text(state.launcherNotice).foregroundColor('green')] : []),
       ]),
       Section('Apps', rows.length > 0 ? [

@@ -112,8 +112,7 @@ const helpEntries: HelpEntry[] = [
   { id: 'launcher:app:cluster', group: 'launcher', usage: 'launcher app cluster <name> <count>', endpoint: 'launcher/app/cluster', description: 'Set app cluster count.' },
   { id: 'launcher:app:settings', group: 'launcher', usage: 'launcher app settings <name> <json-settings>', endpoint: 'launcher/app/settings', description: 'Update app settings.' },
   { id: 'launcher:app:create', group: 'launcher', usage: 'launcher app create <json-create-payload>', endpoint: 'launcher/app/create', description: 'Create app.' },
-  { id: 'launcher:pair', group: 'launcher', usage: 'launcher pair', endpoint: 'launcher/info', description: "Print hub-server's pairing code (only for the launcher's own key, see `hub pair`)." },
-  { id: 'launcher:pair:new', group: 'launcher', usage: 'launcher pair new', endpoint: 'launcher/pair/new', description: 'Replace the pairing code (launcher key only).' },
+  { id: 'launcher:pair:new', group: 'launcher', usage: 'launcher pair new', endpoint: 'launcher/pair/new', description: 'Make a pairing code for another owner (owners only; without an owner use `hub pair` on the hub device).' },
   { id: 'devices', group: 'devices', usage: 'devices', endpoint: 'hub/devices', description: 'Print devices with services, presence and capabilities.' },
   { id: 'devices:pending', group: 'devices', usage: 'devices pending', endpoint: 'hub/devices/pending', description: 'Print devices waiting for approval with their safety codes.' },
   { id: 'device:approve', group: 'devices', usage: 'device approve <id>', endpoint: 'hub/device/approve', description: 'Approve a pending device (compare its safety code first).' },
@@ -213,7 +212,6 @@ const commandRunners: Record<string, CommandRunner> = {
   'launcher:app:cluster': async (context, args) => ok(context, (await context.launcher()).setAppClusterCount(expectArg(args, 0, 'name'), parseNumberArg(args[1], 'count'))),
   'launcher:app:settings': async (context, args) => ok(context, (await context.launcher()).updateAppSettings(expectArg(args, 0, 'name'), parseJsonRequired(args[1], 'json-settings') as LauncherSettings)),
   'launcher:app:create': async (context, args) => ok(context, (await context.launcher()).createApp(parseJsonRequired(args[0], 'json-create-payload') as LauncherCreate)),
-  'launcher:pair': async context => context.log((await (await context.launcher()).info()).pairingCode ?? null),
   'launcher:pair:new': async context => context.log(await (await context.launcher()).newPairingCode()),
   devices: async context => context.log(await (await context.devices()).devices()),
   'devices:pending': async context => context.log(await (await context.devices()).pending()),
@@ -493,7 +491,6 @@ function route(words: string[]): { id: string; args: string[] } {
       if (second === 'update' && third === 'check') return { id: 'launcher:update:check', args: words.slice(3) }
       if (second === 'update') return { id: 'launcher:update', args: words.slice(2) }
       if (second === 'pair' && third === 'new') return { id: 'launcher:pair:new', args: words.slice(3) }
-      if (second === 'pair') return { id: 'launcher:pair', args: words.slice(2) }
       if (second === 'app') {
         if (third === 'start') return { id: 'launcher:app:start', args: words.slice(3) }
         if (third === 'stop') return { id: 'launcher:app:stop', args: words.slice(3) }

@@ -1,22 +1,12 @@
 import { homedir, networkInterfaces } from "node:os";
 import path from "node:path";
 
-import { HubClient } from "../hub/client";
-import { BunFileHubKeyStore, type HubKeyStore } from "../hub/auth/hub-key-store";
-import { MemoryKeyStore } from "../hub/auth/memory-key-store";
-import { LauncherControl } from "../hub/api/launcher-control";
 import { resolveLauncherDirectory } from "./launcher";
 
 type LoggerLike = Pick<Console, "error" | "log">;
 
-/** What `hub pair` needs from the launcher: its info stream and `launcher/pair/new`. */
-export interface PairingLauncher {
-  pairingCode(): Promise<string | undefined>;
-  newPairingCode(): Promise<string>;
-  stop(): void;
-}
-
-export type ConnectLauncher = (options: { address: string | number; launcherKey: string; hubKeys?: HubKeyStore }) => PairingLauncher;
+/** Runs `bun . --pair` in hub-server's folder: a one-shot that writes a new code and exits. */
+export type RunPair = (directory: string) => Promise<{ exitCode: number; stderr: string }>;
 
 const PAIR_HELP = [
   "Usage: hub pair [--new] [--address <host:port>]",
@@ -24,23 +14,31 @@ const PAIR_HELP = [
   "Shows the pairing code of this device's hub-server. Enter it with the hub's address in the",
   "Hub app (Connect to a Hub) to become the hub's owner. The code works once, for one hour.",
   "",
-  "  --new                   Replace the code with a new one",
+  "  --new                   Replace the code with a new one (hub-server --pair)",
   "  --address <host:port>   The address the Hub app should dial (default: this device's LAN address)",
 ].join("\n");
 
-/** Connects to the local hub with the launcher's own key, which is the only key the launcher shows the code to. */
-function connectLauncher(options: { address: string | number; launcherKey: string; hubKeys?: HubKeyStore }): PairingLauncher {
-  const client = new HubClient({
-    address: options.address,
-    keyStore: new MemoryKeyStore(options.launcherKey),
-    hubKeys: options.hubKeys ?? new BunFileHubKeyStore(),
-  });
-  const launcher = new LauncherControl(client);
-  return {
-    pairingCode: async () => (await launcher.info()).pairingCode,
-    newPairingCode: () => launcher.newPairingCode(),
-    stop: () => client.stop(),
-  };
+async function runPair(directory: string): Promise<{ exitCode: number; stderr: string }> {
+  const pair = Bun.spawn([process.execPath, ".", "--pair"], { cwd: directory, stdout: "ignore", stderr: "pipe", timeout: 30_000 });
+  const [exitCode, stderr] = await Promise.all([pair.exited, new Response(pair.stderr).text()]);
+  return { exitCode, stderr };
+}
+
+/** The launcher's hub-server folder (`Git.directory` in hub-launcher names it after the repository) */
+export function resolveHubServerDirectory(homeDirectory = homedir()): string {
+  return path.join(resolveLauncherDirectory(homeDirectory), "apps", "hub-server");
+}
+
+/** `K7Q2MX` → `K7Q-2MX`, as hub-server shows it */
+export function formatPairingCode(text: string): string | undefined {
+  const code = text.replace(/[\s-]/g, "").toUpperCase();
+  if (!code) return undefined;
+  return code.length === 6 ? `${code.slice(0, 3)}-${code.slice(3)}` : code;
+}
+
+async function readPairingCode(directory: string): Promise<string | undefined> {
+  const file = Bun.file(path.join(directory, "data", "pairing-code"));
+  return (await file.exists()) ? formatPairingCode(await file.text()) : undefined;
 }
 
 /** `hub://pair?a=<address>&c=<code>`, which the Hub app opens as "Connect to a Hub" with both filled in */
@@ -49,14 +47,17 @@ export function pairingLink(address: string, code: string): string {
   return `hub://pair?a=${encode(address)}&c=${encode(code)}`;
 }
 
-/** This device's first LAN IPv4 address with the hub's port, for other devices to dial */
+/**
+ * This device's LAN IPv4 address with the hub's port, for other devices to dial. Ethernet and Wi-Fi interfaces come
+ * before bridges and VPNs, and link-local addresses (169.254.x) last.
+ */
 export function lanAddress(port: string | number, interfaces = networkInterfaces()): string {
-  for (const list of Object.values(interfaces)) {
-    for (const item of list ?? []) {
-      if (item.family === "IPv4" && !item.internal) return `${item.address}:${port}`;
-    }
-  }
-  return `localhost:${port}`;
+  const rank = (name: string, address: string) =>
+    (address.startsWith("169.254.") ? 2 : 0) + (/^(en|eth|wl)/.test(name) ? 0 : 1);
+  const candidates = Object.entries(interfaces)
+    .flatMap(([name, list]) => (list ?? []).filter(item => item.family === "IPv4" && !item.internal).map(item => ({ name, address: item.address })))
+    .sort((a, b) => rank(a.name, a.address) - rank(b.name, b.address));
+  return `${candidates[0]?.address ?? "localhost"}:${port}`;
 }
 
 function hubPort(hub: string | undefined): string {
@@ -65,28 +66,17 @@ function hubPort(hub: string | undefined): string {
   return match?.[1] ?? "1997";
 }
 
-async function withTimeout<T>(promise: Promise<T>, milliseconds: number, message: string): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(message)), milliseconds);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
+/**
+ * The code never goes over the hub: it is read from hub-server's `data/pairing-code` on this device. With `--new`
+ * (no owner yet, or every owner device lost) hub-server's one-shot `--pair` writes a new one.
+ */
 export async function pair(options: {
   args: string[];
   env?: Record<string, string | undefined>;
   homeDirectory?: string;
   logger?: LoggerLike;
-  connect?: ConnectLauncher;
+  run?: RunPair;
   interfaces?: ReturnType<typeof networkInterfaces>;
-  timeout?: number;
 }): Promise<void> {
   const logger = options.logger ?? console;
   const env = options.env ?? process.env;
@@ -103,32 +93,29 @@ export async function pair(options: {
     return;
   }
 
-  const launcherDirectory = resolveLauncherDirectory(options.homeDirectory ?? homedir());
-  const keyFile = Bun.file(path.join(launcherDirectory, "auth"));
-  if (!(await keyFile.exists())) {
-    logger.error(`Hub Launcher has no key at ${launcherDirectory}. Start it with \`hub\` first.`);
+  const directory = resolveHubServerDirectory(options.homeDirectory ?? homedir());
+  if (!(await Bun.file(path.join(directory, "package.json")).exists())) {
+    logger.error(`hub-server isn't installed at ${directory}. Start the launcher with \`hub\` first.`);
     process.exitCode = 1;
     return;
   }
-  const hub = env.HUB ?? 1997;
-  const launcher = (options.connect ?? connectLauncher)({ address: hub, launcherKey: (await keyFile.text()).trim() });
-  try {
-    const timeout = options.timeout ?? 15_000;
-    const unreachable = `Can't reach the hub at ${hub}. Is the launcher running (\`hub status\`)?`;
-    const code = args.includes("--new")
-      ? await withTimeout(launcher.newPairingCode(), timeout, unreachable)
-      : await withTimeout(launcher.pairingCode(), timeout, unreachable);
-    if (!code) {
-      logger.log("No pairing code: this hub already has an owner, or hub-server isn't installed.");
-      logger.log("Run `hub pair --new` for a new code.");
+  if (args.includes("--new")) {
+    const result = await (options.run ?? runPair)(directory);
+    if (result.exitCode !== 0) {
+      logger.error(`hub-server --pair failed: ${result.stderr.trim() || `exit code ${result.exitCode}`}`);
+      process.exitCode = 1;
       return;
     }
-    const dial = address ?? lanAddress(hubPort(env.HUB), options.interfaces);
-    logger.log(`Pairing code: ${code} (works once, for one hour)`);
-    logger.log(`Hub address:  ${dial}`);
-    logger.log(`Link:         ${pairingLink(dial, code)}`);
-    logger.log("In the Hub app, choose Connect to a Hub and enter the address and the code.");
-  } finally {
-    launcher.stop();
   }
+  const code = await readPairingCode(directory);
+  if (!code) {
+    logger.log("No pairing code: this hub already has an owner, or the code was used or expired.");
+    logger.log("Run `hub pair --new` for a new code.");
+    return;
+  }
+  const dial = address ?? lanAddress(hubPort(env.HUB), options.interfaces);
+  logger.log(`Pairing code: ${code} (works once, for one hour)`);
+  logger.log(`Hub address:  ${dial}`);
+  logger.log(`Link:         ${pairingLink(dial, code)}`);
+  logger.log("In the Hub app, choose Connect to a Hub and enter the address and the code.");
 }

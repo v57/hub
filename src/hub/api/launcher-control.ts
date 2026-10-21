@@ -49,7 +49,7 @@ export class LauncherControl {
     await this.client.send('launcher/stop')
   }
 
-  /** Replaces hub-server's pairing code; the launcher accepts it from its own key only */
+  /** Replaces hub-server's pairing code and returns it; owners only, to add another owner */
   newPairingCode(): Promise<string> {
     return this.client.send<string>('launcher/pair/new')
   }
@@ -104,8 +104,7 @@ export function flattenLauncherProcesses(status: LauncherStatus): LauncherProces
 export function normalizeLauncherInfo(value: unknown): LauncherInfo {
   const item = asRecord(value)
   const apps = arrayValues(item?.apps ?? value).map(normalizeLauncherAppInfo).filter((app): app is LauncherAppInfo => Boolean(app))
-  const pairingCode = optionalString(item?.pairingCode)
-  return pairingCode ? { apps, pairingCode, raw: value } : { apps, raw: value }
+  return { apps, raw: value }
 }
 
 export function normalizeLauncherStatus(value: unknown): LauncherStatus {
