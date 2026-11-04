@@ -88,9 +88,11 @@ The client signs in with its own key (kept in the OS keychain through Bun.secret
 no device grants, shares or device data. With `--device` it also sends a certificate from the device key
 (`HUB_DEVICE_KEY`, or `~/.hub/device.key`, created if missing) so the hub attaches it to this device.
 
-On the first connection to a hub the client asks `hub/info` for the hub key and pins it per address in
-`~/.hub-lib/hubs.json`; from then on its tokens only work on that hub. If the hub later refuses the token with
-`invalid signature`, the hub key changed or another server answers at that address: check it, then forget the pin.
+Before each connection the client asks `hub/info` anonymously with a nonce, and the hub proves its key by signing it. The
+client pins that key per address in `~/.hub-lib/hubs.json` and signs a token for that hub and one challenge, so a token
+works once on one hub. If a hub can't prove the pinned key the client sends it nothing: the hub key changed or another
+server answers at that address. Check it, then forget the pin. Plain `ws://` beyond loopback, the Hub Network overlay and
+the local network is refused; use `wss://` (`HUB_ALLOW_PLAINTEXT=1` allows it for a private network).
 
 ## Command Cheatsheet
 

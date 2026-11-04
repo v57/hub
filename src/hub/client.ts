@@ -1,3 +1,5 @@
+import { Channel } from 'channel/client'
+import { hubTransport, makeClientNonce, verifyHubProof } from 'hub-service/hub-proof'
 import { MultiplatformService, type ServiceOptions } from 'hub-service/service'
 import type { DeviceIdentity } from './auth/device-key'
 import { MemoryHubKeyStore, type HubKeyStore } from './auth/hub-key-store'
@@ -13,22 +15,29 @@ export interface HubClientOptions {
   profile?: HubProfile
   serviceFactory?: HubServiceFactory
   autoStart?: boolean
-  /** Pinned hub keys; the client learns and pins the key from `hub/info` on its first connection. */
+  /** Pinned hub keys; the client pins the key a hub proves in `hub/info` on its first connection. */
   hubKeys?: HubKeyStore
   /** A hub key known up front (from an invitation or config); pinned on first use. */
   hubKey?: string
+  /** Allows plain `ws://` beyond loopback, the overlay and the LAN, for a private network; also `HUB_ALLOW_PLAINTEXT=1`. */
+  allowPlaintext?: boolean
+  /** Asks `hub/info` before any credentials are sent; by default over a connection of its own. */
+  askHubInfo?: HubInfoAsker
   /** Sends a certificate from this device key; without it the client is a key-only client without a device. */
   device?: DeviceIdentity
 }
 
 export interface HubServiceOptions extends ServiceOptions {
   onConnect?(sender: HubSenderLike): Promise<void>
+  /** Whether a refused connect can try once more with a new challenge. */
+  mayRetry?(): boolean
 }
 
 export type HubConnectionHeaders = Record<string, string>
 export type HubServiceFactory = (headers: () => Promise<HubConnectionHeaders>, options: HubServiceOptions) => HubServiceLike
+export type HubInfoAsker = (address: string, nonce: string) => Promise<unknown>
 
-/** `hub/info`, answered by hubs that speak protocol 1. */
+/** `hub/info`, answered by every hub to anyone. */
 export interface HubInfo {
   key: string
   protocol: number
@@ -36,8 +45,11 @@ export interface HubInfo {
   mode?: 'default-allow' | 'default-deny'
 }
 
-/** Token lifetime for connect headers (the hub accepts up to 300 s). */
-const authExpiresSeconds = 60
+/** Token lifetime for connect headers (the hub accepts up to 60 s). */
+const authExpiresSeconds = 30
+
+/** The address answered the upgrade without a WebSocket: it is not a Hub. */
+class NotAHub extends Error {}
 
 export interface HubServiceLike {
   address?: HubAddress
@@ -70,7 +82,11 @@ export class HubClient {
   info?: HubInfo
   private readonly serviceFactory: HubServiceFactory
   private readonly suppliedHubKey?: string
+  private readonly allowsPlaintext: boolean
+  private readonly askHubInfo: HubInfoAsker
   private lastConnectVersion?: string
+  /** Set when the hub at the address can't prove the key pinned for it. */
+  private keyMismatch = false
   private service?: HubServiceLike
   private hasStarted = false
   private hasStopped = false
@@ -83,17 +99,20 @@ export class HubClient {
     this.device = options.device
     this.profile = options.profile
     this.serviceFactory = options.serviceFactory ?? defaultServiceFactory
+    this.allowsPlaintext = options.allowPlaintext ?? globalThis.Bun?.env?.HUB_ALLOW_PLAINTEXT === '1'
+    this.askHubInfo = options.askHubInfo ?? askHubInfoAnonymously
     if (options.autoStart) this.start()
   }
 
   start(): this {
-    if (this.hasStarted) return this
+    if (this.hasStarted || this.plaintextRefusal()) return this
     this.hasStopped = false
+    this.keyMismatch = false
     this.service = this.serviceFactory(() => this.connectHeaders(), {
       address: this.address,
       name: this.profile?.name,
       icon: typeof this.profile?.icon === 'string' ? undefined : this.profile?.icon,
-      onConnect: sender => this.learnHubKey(sender),
+      mayRetry: () => !this.keyMismatch && !this.hasStopped,
     })
     if (this.profile && this.service) this.service.profile = this.profile
     this.service.start()
@@ -110,31 +129,59 @@ export class HubClient {
     return this.suppliedHubKey
   }
 
-  /** Clears the pin; the next connect uses `v: 0` and learns the key again. */
+  /** Clears the pin; the next connect pins what the hub proves. */
   forgetHubKey(): Promise<boolean> {
     return this.hubKeys.forget(this.address)
   }
 
   /**
-   * Headers for each connect: a `v: 1` token bound to the pinned hub key, or `v: 0` until one is known, plus the
-   * `device` certificate in device mode. A refused `v: 1` token is not retried as `v: 0`.
+   * Headers for each connect, after the hub proves its key (protocol.md section 2): a `v: 1` token over the challenge
+   * it gave, plus the `device` certificate in device mode. Waits while the hub doesn't answer with a proof, and sends
+   * nothing to a hub that can't prove the pinned key.
    */
   async connectHeaders(): Promise<HubConnectionHeaders> {
-    const headers: HubConnectionHeaders = await this.keyStore.authHeaders(authExpiresSeconds, await this.hubKey())
-    this.lastConnectVersion = headers.v
-    if (this.device) headers.device = await this.device.certificate(await this.keyStore.publicKey())
-    return headers
+    const pinned = await this.hubKey()
+    let delay = 500
+    while (!this.hasStopped) {
+      const nonce = makeClientNonce()
+      let answer: unknown
+      try {
+        answer = await this.askHubInfo(this.address, nonce)
+      } catch (error) {
+        if (error instanceof NotAHub) return this.stopConnecting()
+      }
+      if (await verifyHubProof(answer, nonce)) {
+        const info = normalizeHubInfo(answer)!
+        this.info = info
+        if (pinned && info.key !== pinned) {
+          this.keyMismatch = true
+          return this.stopConnecting()
+        }
+        if (!pinned) await this.hubKeys.pin(this.address, info.key)
+        const headers: HubConnectionHeaders = await this.keyStore.authHeaders(authExpiresSeconds, info.key, (answer as { challenge: string }).challenge)
+        this.lastConnectVersion = headers.v
+        if (this.device) headers.device = await this.device.certificate(await this.keyStore.publicKey())
+        return headers
+      }
+      await new Promise(resolve => setTimeout(resolve, delay))
+      delay = Math.min(delay * 2, 5000)
+    }
+    return {}
   }
 
-  private async learnHubKey(sender: HubSenderLike): Promise<void> {
-    try {
-      const info = normalizeHubInfo(await sender.send('hub/info'))
-      if (!info) return
-      this.info = info
-      if (!(await this.hubKeys.get(this.address))) await this.hubKeys.pin(this.address, info.key)
-    } catch {
-      // Hubs without `hub/info` (retired hub-lite, hub-pro before the device layer) keep v0.
-    }
+  /** Channel treats this as refused, and connects anonymously only until it sees that. */
+  private stopConnecting(): HubConnectionHeaders {
+    const ws = this.service?.sender?.ws
+    if (ws) ws.isRunning = false
+    return {}
+  }
+
+  private plaintextRefusal(): HubError | undefined {
+    if (this.allowsPlaintext || hubTransport(this.address) !== 'refused') return undefined
+    return new HubError(`${this.address} would carry this client's key unencrypted`, {
+      kind: 'connection',
+      hint: 'Use wss://, or HUB_ALLOW_PLAINTEXT=1 if this is a private network.',
+    })
   }
 
   get connected(): boolean {
@@ -188,25 +235,29 @@ export class HubClient {
   }
 
   stop(): void {
+    this.hasStopped = true
     this.service?.sender?.stop?.()
     this.service?.sender?.ws?.stop?.()
-    this.hasStopped = true
     this.hasStarted = false
   }
 
   /**
    * The hub refused the connection: channel stops reconnecting after an upgrade without a WebSocket, so requests would
-   * wait forever. With a pinned hub key that is how a refused `v: 1` token shows.
+   * wait forever. That is how a refused token shows, and how this client stops when a hub can't prove the pinned key.
    */
   refusal(): HubError | undefined {
     const ws = this.service?.sender?.ws
     if (!this.hasStarted || this.hasStopped || !ws || ws.isRunning !== false) return undefined
-    const pinned = this.lastConnectVersion === '1'
+    if (this.keyMismatch) {
+      return new HubError(`${this.address} can't prove the pinned hub key`, {
+        kind: 'auth',
+        hint: 'The hub key changed or another server answers at this address. Nothing was sent to it. If that is expected, forget the pinned key (hubkey forget) and connect again.',
+      })
+    }
+    const refused = this.lastConnectVersion === '1'
     return new HubError(`${this.address} refused the connection`, {
-      kind: pinned ? 'auth' : 'connection',
-      hint: pinned
-        ? 'The hub refused the token bound to its pinned key: the hub key changed or another server answers at this address. If that is expected, forget the pinned key (hubkey forget) and connect again.'
-        : 'The address answered without a Hub WebSocket.',
+      kind: refused ? 'auth' : 'connection',
+      hint: refused ? 'The hub refused the signed token: this key may not be allowed on it.' : 'The address answered without a Hub WebSocket.',
     })
   }
 
@@ -228,7 +279,10 @@ export class HubClient {
         },
         error => {
           clearInterval(timer)
-          reject(error)
+          // Channel fails what's waiting when it stops
+          const refusal = this.refusal()
+          if (refusal) refusal.path = path
+          reject(refusal ?? error)
         },
       )
     })
@@ -248,8 +302,23 @@ export class HubClient {
 
   private ensureStarted(): HubServiceLike {
     if (!this.hasStarted) this.start()
+    const refusal = this.plaintextRefusal()
+    if (refusal) throw refusal
     if (!this.service) throw new HubError('Hub service not started', { kind: 'connection' })
     return this.service
+  }
+}
+
+/** `hub/info` on a connection of its own, without credentials. */
+async function askHubInfoAnonymously(address: string, nonce: string): Promise<unknown> {
+  const probe = new Channel().connect(address) as unknown as HubSenderLike & { stop(): void }
+  try {
+    return await probe.send('hub/info', { nonce }, { timeout: 5 } as never)
+  } catch (error) {
+    // Channel stops when the upgrade is answered without a WebSocket
+    throw probe.ws?.isRunning === false ? new NotAHub() : error
+  } finally {
+    probe.stop()
   }
 }
 
@@ -273,18 +342,20 @@ export function normalizeHubInfo(value: unknown): HubInfo | undefined {
 /** A key-only client connection: `MultiplatformService` with our own headers (it hard-codes `v: 0`). */
 class HubClientService extends MultiplatformService {
   constructor(
-    private readonly headers: () => Promise<HubConnectionHeaders>,
-    private readonly options: HubServiceOptions,
+    private readonly hubHeaders: () => Promise<HubConnectionHeaders>,
+    private readonly hubOptions: HubServiceOptions,
   ) {
-    super(async () => '', options)
+    super(async () => '', hubOptions)
   }
 
   override start(): this {
     const getProfile = () => this.profile
-    const onConnect = this.options.onConnect
+    const onConnect = this.hubOptions.onConnect
+    let retried = false
     this.sender = this.channel.connect(this.address, {
-      headers: this.headers,
+      headers: this.hubHeaders,
       async onConnect(sender) {
+        retried = false
         try {
           const profile = getProfile()
           if (profile) await sender.send('hub/profile/update', profile)
@@ -293,6 +364,14 @@ class HubClientService extends MultiplatformService {
         await onConnect?.(sender)
       },
     })
+    // Channel stops on a refused upgrade. The challenge can be gone by then (the hub restarted, or its nonce store turned
+    // over), so one refusal just reconnects with a new one, keeping what's waiting.
+    const ws = this.sender!.ws as unknown as { isConnected: boolean; stop(): void }
+    const stop = ws.stop.bind(ws)
+    ws.stop = () => {
+      if (ws.isConnected || retried || !this.hubOptions.mayRetry?.()) return stop()
+      retried = true
+    }
     return this
   }
 }

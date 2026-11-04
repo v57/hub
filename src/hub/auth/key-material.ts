@@ -33,23 +33,24 @@ export function getHubPublicKey(key: string): string {
   return encodeBase64(keyBuffer.subarray(keyBuffer.length - publicDerLength))
 }
 
-/** Signs `auth` for one hub (`v: 1`) when `hubKey` is given, otherwise the hub-agnostic `v: 0` token. */
-export async function signHubAuth(key: string, expiresSeconds = 10, hubKey?: string): Promise<string> {
-  return signHubAuthAt(key, Math.round(Date.now() / 1000) + expiresSeconds, hubKey)
+/** Signs `auth` for one hub (`v: 1`) over its one-time `nonce` when given, otherwise the hub-agnostic `v: 0` token. */
+export async function signHubAuth(key: string, expiresSeconds = 10, hubKey?: string, nonce?: string): Promise<string> {
+  return signHubAuthAt(key, Math.round(Date.now() / 1000) + expiresSeconds, hubKey, nonce)
 }
 
-export async function signHubAuthAt(key: string, expiry: number, hubKey?: string): Promise<string> {
-  const signature = await signHubData(key, hubAuthSignedData(expiry, hubKey))
-  return `key.${getHubPublicKey(key)}.${signature}.${expiry}`
+export async function signHubAuthAt(key: string, expiry: number, hubKey?: string, nonce?: string): Promise<string> {
+  const signature = await signHubData(key, hubAuthSignedData(expiry, hubKey, nonce))
+  const token = `key.${getHubPublicKey(key)}.${signature}.${expiry}`
+  return hubKey ? `${token}.${nonce}` : token
 }
 
-export function hubAuthSignedData(expiry: number, hubKey?: string): string {
-  return hubKey ? `hub1:${hubKey}:${expiry}` : `${expiry}`
+export function hubAuthSignedData(expiry: number, hubKey?: string, nonce?: string): string {
+  return hubKey ? `hub1:${hubKey}:${nonce}:${expiry}` : `${expiry}`
 }
 
-export async function hubAuthHeaders(key: string, expiresSeconds = 10, hubKey?: string): Promise<Record<'auth' | 'v', string>> {
+export async function hubAuthHeaders(key: string, expiresSeconds = 10, hubKey?: string, nonce?: string): Promise<Record<'auth' | 'v', string>> {
   return {
-    auth: await signHubAuth(key, expiresSeconds, hubKey),
+    auth: await signHubAuth(key, expiresSeconds, hubKey, nonce),
     v: hubKey ? '1' : '0',
   }
 }

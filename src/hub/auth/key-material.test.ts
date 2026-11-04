@@ -14,14 +14,14 @@ test('v0 auth signs the expiry only', async () => {
   expect(await signHubAuthAt(keys.service.keyFile, auth.expiry)).toBe(auth.v0.header)
 })
 
-test('v1 auth binds the token to the hub key', async () => {
-  expect(hubAuthSignedData(auth.expiry, keys.hub.publicKey)).toBe(auth.v1.signedData)
-  expect(await signHubAuthAt(keys.service.keyFile, auth.expiry, keys.hub.publicKey)).toBe(auth.v1.header)
+test('v1 auth binds the token to the hub key and its one-time nonce', async () => {
+  expect(hubAuthSignedData(auth.expiry, keys.hub.publicKey, auth.nonce)).toBe(auth.v1.signedData)
+  expect(await signHubAuthAt(keys.service.keyFile, auth.expiry, keys.hub.publicKey, auth.nonce)).toBe(auth.v1.header)
 })
 
 test('auth headers send v 1 only with a hub key', async () => {
   expect((await hubAuthHeaders(keys.service.keyFile)).v).toBe('0')
-  const headers = await hubAuthHeaders(keys.service.keyFile, 10, keys.hub.publicKey)
+  const headers = await hubAuthHeaders(keys.service.keyFile, 10, keys.hub.publicKey, auth.nonce)
   expect(headers.v).toBe('1')
   expect(headers.auth.startsWith(`key.${keys.service.publicKey}.`)).toBe(true)
 })
