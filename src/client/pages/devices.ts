@@ -104,7 +104,7 @@ export const devicesPage: ClientPage = {
 }
 
 function pendingCard(state: ClientPageState, device: HubPendingDevice) {
-  const details = [device.platform, device.parent ? `in ${device.parent}` : undefined, device.firstSeen ? `first seen ${device.firstSeen}` : undefined]
+  const details = [device.platform, device.parent ? `says it runs in ${device.parent}` : undefined, device.firstSeen ? `first seen ${device.firstSeen}` : undefined]
   return Card(device.name || 'Unnamed device', [
     Text(details.filter(Boolean).join(' / ') || device.id).foregroundColor('secondary'),
     Text(device.safetyCode ? `Safety code ${device.safetyCode}` : 'No safety code to compare').fontWeight('bold'),

@@ -87,6 +87,8 @@ export function normalizeDevice(value: unknown): HubDevice | undefined {
     os: optionalString(item.os),
     arch: optionalString(item.arch),
     parent: optionalString(item.parent),
+    attachedTo: optionalString(item.attachedTo),
+    linked: typeof item.linked === 'boolean' ? item.linked : undefined,
     approved: item.approved === true,
     revoked: item.revoked === true,
     online: item.online === true,

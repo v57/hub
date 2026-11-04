@@ -26,7 +26,12 @@ export interface HubDevice {
   platform?: string
   os?: string
   arch?: string
+  /** A name the device declares for where it runs. It proves nothing. */
   parent?: string
+  /** The parent's device id, signed by it (protocol.md section 14). */
+  attachedTo?: string
+  /** Whether grants the owner linked reach this child. */
+  linked?: boolean
   approved: boolean
   revoked: boolean
   online: boolean
