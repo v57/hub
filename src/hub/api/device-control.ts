@@ -1,3 +1,4 @@
+import { hubSafetyCode } from '../auth/key-material'
 import type { HubRuntimeClient } from '../runtime'
 import type {
   HubDevice,
@@ -22,8 +23,20 @@ export class DeviceControl {
     return firstValue(this.watchPending())
   }
 
-  watchPending(): AsyncIterable<HubPendingDevice[]> {
-    return mapValues(this.client.values('hub/devices/pending'), normalizePendingDevices)
+  /**
+   * Pending devices, each with the safety code worked out from the hub key this client pinned. A code that can't be
+   * worked out, or that the hub states differently, is left empty: it would say nothing about this hub.
+   */
+  async *watchPending(): AsyncIterable<HubPendingDevice[]> {
+    for await (const value of this.client.values('hub/devices/pending')) {
+      const hubKey = await this.client.hubKey?.()
+      yield await Promise.all(
+        normalizePendingDevices(value).map(async device => {
+          const code = hubKey && device.codeValue ? await hubSafetyCode(hubKey, device.key, device.codeValue) : undefined
+          return { ...device, safetyCode: code === device.safetyCode ? code : '' }
+        }),
+      )
+    }
   }
 
   async approve(id: string): Promise<HubDevice | undefined> {
@@ -102,6 +115,7 @@ export function normalizePendingDevices(value: unknown): HubPendingDevice[] {
         platform: optionalString(record.platform),
         parent: optionalString(record.parent),
         safetyCode: optionalString(record.safetyCode) ?? '',
+        codeValue: optionalString(record.codeValue),
         firstSeen: optionalString(record.firstSeen),
       }
     })

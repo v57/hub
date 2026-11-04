@@ -33,7 +33,9 @@ test('key material exposes the vector public keys', () => {
 
 test('device id and safety code match the vectors', async () => {
   expect(await hubDeviceId(keys.device.publicKey)).toBe(keys.device.deviceId)
-  expect(await hubSafetyCode(keys.device.publicKey)).toBe(keys.device.safetyCode)
+  for (const { hubKey, deviceKey, codeValue, code } of vectors.safetyCode.cases) {
+    expect(await hubSafetyCode(hubKey, deviceKey, codeValue)).toBe(code)
+  }
 })
 
 test('service certificates match the vectors', async () => {

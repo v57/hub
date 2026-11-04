@@ -4,11 +4,15 @@ import { macStudio, MockHubClient } from '../../hub/api/test-support'
 import { renderHubClientFrame } from '../index'
 import { createClientPageState } from './types'
 import { flush, plain, press, render, stripAnsi } from './test-support'
+import { safetyCode as safetyCodes } from '../../hub/auth/testdata/device-vectors.json'
 
 function liveHub() {
   const client = new MockHubClient()
   client.streamResults.set('hub/devices', [[macStudio]])
-  client.streamResults.set('hub/devices/pending', [[{ id: 'p1', key: 'PK', name: 'iPhone', platform: 'ios', safetyCode: '474 971' }]])
+  // The vector for this code, so the page gets one the pinned key confirms
+  const code = safetyCodes.cases[0]!
+  client.pinnedHubKey = code.hubKey
+  client.streamResults.set('hub/devices/pending', [[{ id: 'p1', key: code.deviceKey, name: 'iPhone', platform: 'ios', safetyCode: code.code, codeValue: code.codeValue }]])
   client.streamResults.set('hub/devices/data', [{ cpu: 0.5, battery: 0.3, network: 'cellular', uptime: 12 }])
   return { client, live: { devices: new DeviceControl(client), security: new SecurityControl(client) } }
 }
@@ -39,7 +43,7 @@ test('devices page streams from the hub and approves a pending device', async ()
   const { client, live } = liveHub()
   const view = render({ live }, ['devices'])
   await flush()
-  expect(plain(view.terminal)).toContain('Safety code 474 971')
+  expect(plain(view.terminal)).toContain('Safety code 741 709')
   expect(plain(view.terminal)).toContain('Mac Studio')
 
   await press(view, 'Approve')

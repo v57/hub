@@ -6,12 +6,20 @@ import {
   normalizeDevices,
   normalizePendingDevices,
 } from './device-control'
+import { hubSafetyCode } from '../auth/key-material'
 import { macStudio, MockHubClient } from './test-support'
 
 test('DeviceControl streams devices and sends exact device payloads', async () => {
   const client = new MockHubClient()
   client.streamResults.set('hub/devices', [[{ ...macStudio, online: false, name: 'B' }, macStudio, { name: 'no id' }]])
-  client.streamResults.set('hub/devices/pending', [[{ id: 'p1', key: 'PK', safetyCode: '474 971', firstSeen: '2026-10-20T09:00:00Z' }]])
+  const codeValue = 'CwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCws'
+  const code = await hubSafetyCode('HK', 'PK', codeValue)
+  client.pinnedHubKey = 'HK'
+  client.streamResults.set('hub/devices/pending', [[
+    { id: 'p1', key: 'PK', safetyCode: code, codeValue, firstSeen: '2026-10-20T09:00:00Z' },
+    { id: 'old', key: 'PK2', safetyCode: '474 971', firstSeen: '2026-10-20T10:00:00Z' },
+    { id: 'wrong', key: 'PK', safetyCode: '000 000', codeValue, firstSeen: '2026-10-20T11:00:00Z' },
+  ]])
   client.streamResults.set('hub/devices/data', [{ cpu: 0.25, battery: 0.8, charging: true, network: 'wifi' }])
   client.sendResults.set('hub/device/approve', { ...macStudio, id: 'p1' })
   const devices = new DeviceControl(client)
@@ -19,7 +27,8 @@ test('DeviceControl streams devices and sends exact device payloads', async () =
   const list = await devices.devices()
   expect(list.map(device => device.name)).toEqual(['Mac Studio', 'B'])
   expect(list[0]!.services[0]).toEqual(macStudio.services[0]!)
-  expect(await devices.pending()).toEqual([{ id: 'p1', key: 'PK', safetyCode: '474 971', firstSeen: '2026-10-20T09:00:00Z' }])
+  // Only what the pinned key confirms is shown: a hub without a value, or stating another code, shows none
+  expect((await devices.pending()).map(device => [device.id, device.safetyCode])).toEqual([['p1', code], ['old', ''], ['wrong', '']])
   expect((await devices.approve('p1'))?.id).toBe('p1')
   await devices.rename('p1', 'Studio')
   await devices.remove('p1')

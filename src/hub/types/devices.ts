@@ -45,6 +45,8 @@ export interface HubPendingDevice {
   platform?: string
   parent?: string
   safetyCode: string
+  /** What the safety code covers besides the keys; recompute the code with `hubSafetyCode` and the pinned hub key */
+  codeValue?: string
   firstSeen?: string
 }
 

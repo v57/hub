@@ -66,9 +66,12 @@ export async function hubDeviceId(publicKey: string): Promise<string> {
   return Array.from(hash.subarray(0, 16), byte => byte.toString(16).padStart(2, '0')).join('')
 }
 
-/** Safety code shown on both sides of a device approval: the same hash's first 4 bytes mod 10^6, as `ddd ddd`. */
-export async function hubSafetyCode(publicKey: string): Promise<string> {
-  const hash = await sha256(decodeBase64(publicKey))
+/**
+ * Safety code shown on both sides of a device approval: the first 4 bytes of a hash of the hub's key, the device's key
+ * and the value the hub picked for it, mod 10^6, as `ddd ddd`. `hubKey` is the key this side pinned.
+ */
+export async function hubSafetyCode(hubKey: string, publicKey: string, codeValue: string): Promise<string> {
+  const hash = await sha256(new TextEncoder().encode(`hubcode1:${hubKey}:${publicKey}:${codeValue}`))
   const value = (((hash[0]! << 24) >>> 0) + (hash[1]! << 16) + (hash[2]! << 8) + hash[3]!) % 1_000_000
   const digits = `${value}`.padStart(6, '0')
   return `${digits.slice(0, 3)} ${digits.slice(3)}`

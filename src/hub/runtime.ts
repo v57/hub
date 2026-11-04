@@ -24,6 +24,8 @@ import { normalizeStorageList } from './api/storage-control'
 import { normalizeAppHeaders, normalizeAppInterface } from './api/app-control'
 
 export interface HubRuntimeClient {
+  /** The hub's key as this client pinned it */
+  hubKey?(): Promise<string | undefined>
   connected: boolean
   send<T = unknown>(path: string, body?: unknown, context?: HubContext): Promise<T>
   values<T = unknown>(path: string, body?: unknown, context?: HubContext): AsyncIterable<T>

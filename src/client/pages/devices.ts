@@ -107,8 +107,8 @@ function pendingCard(state: ClientPageState, device: HubPendingDevice) {
   const details = [device.platform, device.parent ? `in ${device.parent}` : undefined, device.firstSeen ? `first seen ${device.firstSeen}` : undefined]
   return Card(device.name || 'Unnamed device', [
     Text(details.filter(Boolean).join(' / ') || device.id).foregroundColor('secondary'),
-    Text(`Safety code ${device.safetyCode || '-'}`).fontWeight('bold'),
-    Text('Approve only if the device shows the same code.').foregroundColor('secondary'),
+    Text(device.safetyCode ? `Safety code ${device.safetyCode}` : 'No safety code to compare').fontWeight('bold'),
+    Text(device.safetyCode ? 'Approve only if the device shows the same code.' : 'This Hub can\'t confirm one for the key you pinned, so this device can\'t be checked.').foregroundColor('secondary'),
     HStack([
       Button('Approve', () => approveDevice(state, device), { disabled: !state.live }),
     ], { spacing: 1 }),

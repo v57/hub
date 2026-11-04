@@ -5,11 +5,16 @@ type HubCall = { path: string; body?: unknown }
 
 export class MockHubClient implements HubRuntimeClient {
   connected = true
+  pinnedHubKey?: string
   sends: HubCall[] = []
   streams: HubCall[] = []
   sendResults = new Map<string, unknown>()
   /** Values per stream path; an Error fails the stream, as a missing API does. */
   streamResults = new Map<string, unknown[] | Error>()
+
+  async hubKey(): Promise<string | undefined> {
+    return this.pinnedHubKey
+  }
 
   async send<T = unknown>(path: string, body?: unknown): Promise<T> {
     this.sends.push({ path, body })
