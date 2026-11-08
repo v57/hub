@@ -124,7 +124,8 @@ async function ensureLauncherCloned(launcherDirectory: string, spawn: SpawnFunct
 }
 
 async function installLauncherDependencies(launcherDirectory: string, spawn: SpawnFunction = defaultSpawn): Promise<void> {
-  const install = spawn([process.execPath, "install"], {
+  // Exactly what the launcher's bun.lock pins, never newer (security audit H5)
+  const install = spawn([process.execPath, "install", "--production", "--frozen-lockfile"], {
     cwd: launcherDirectory,
     stdout: "ignore",
     stderr: "ignore",

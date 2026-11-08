@@ -450,7 +450,7 @@ test('installs and launches when the launcher is not running', async () => {
     })
 
     expect(commands).toEqual([
-      [process.execPath, 'install'],
+      [process.execPath, 'install', '--production', '--frozen-lockfile'],
       [process.execPath, 'index.ts'],
     ])
     expect(spawnOptions[0]).toMatchObject({
@@ -638,7 +638,7 @@ test('updates and relaunches a running launcher', async () => {
     expect(killedPids).toEqual([42])
     expect(commands).toEqual([
       ['git', 'pull'],
-      [process.execPath, 'install'],
+      [process.execPath, 'install', '--production', '--frozen-lockfile'],
       [process.execPath, 'index.ts'],
     ])
     expect(spawnOptions[0]).toMatchObject({
@@ -694,7 +694,7 @@ test('restarts a running launcher', async () => {
 
     expect(killedPids).toEqual([42])
     expect(commands).toEqual([
-      [process.execPath, 'install'],
+      [process.execPath, 'install', '--production', '--frozen-lockfile'],
       [process.execPath, 'index.ts'],
     ])
     expect(await Bun.file(resolvePidFilePath(launcherDirectory)).text()).toBe('321\n')
